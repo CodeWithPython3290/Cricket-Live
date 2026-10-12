@@ -22,7 +22,7 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-import game_server
+import multiplayer
 
 SCORES_FEED = "https://static.cricinfo.com/rss/livescores.xml"
 REFRESH_SECONDS = 30
@@ -543,17 +543,31 @@ def page_head(eyebrow, title, subtitle, meta):
     )
 
 
-@st.cache_resource(show_spinner=False)
-def game_server_url():
-    """Start the online game server (game_server.py) once, in the background, and return its address."""
-    game_server.start_in_background(game_server.DEFAULT_PORT)
-    return f"http://{game_server.lan_ip()}:{game_server.DEFAULT_PORT}"
-
-
 @st.cache_data(show_spinner=False)
 def load_template(file_name):
-    content = (TEMPLATE_DIR / file_name).read_text(encoding="utf-8")
-    return content.replace("__GAME_SERVER__", game_server_url())
+    return (TEMPLATE_DIR / file_name).read_text(encoding="utf-8")
+
+
+# The cricket game's Play button is a small custom component (templates/index.html). Besides opening the
+# game, it relays the game's online requests (sign-in, rooms, each ball) to multiplayer.py, which keeps
+# everything in cricket_multiplayer.db - so players anywhere can meet in the same room.
+cricket_bridge = components.declare_component("cricket_bridge", path=str(TEMPLATE_DIR))
+
+
+@st.fragment
+def cricket_launcher():
+    request = st.session_state.get("cricket_bridge") or {}
+    done = st.session_state.setdefault("cricket_done", {})
+    responses = {}
+    for req in (request.get("reqs") or [])[:50]:
+        rid = str(req.get("id", ""))
+        if rid and rid not in done:
+            done[rid] = multiplayer.handle(req.get("op"), req.get("data"), rid)
+        if rid in done:
+            responses[rid] = done[rid]
+    for rid in list(done)[:-300]:  # keep the reply cache small
+        done.pop(rid)
+    cricket_bridge(responses=responses, key="cricket_bridge", default=None)
 
 
 def inspect_template(template_name):
@@ -570,16 +584,18 @@ def templates_gallery():
             tags = "".join(f'<span class="tpl-tag">{html.escape(tag)}</span>' for tag in t["tags"])
             server = ""
             if t.get("online"):
-                url = html.escape(game_server_url())
-                server = (f'<div class="tpl-desc" style="margin-top:6px">🌐 Online server running at <b>{url}</b>. '
-                          f'Friends on the same Wi-Fi can play by opening <a href="{url}" target="_blank">{url}</a>.</div>')
+                server = ('<div class="tpl-desc" style="margin-top:6px">🌐 <b>Online:</b> create a room and share its code. '
+                          'Friends anywhere can join by opening this app. Keep this tab open while you play online.</div>')
             info.markdown(
                 f'<div class="tpl"><div class="tpl-icon">{t["icon"]}</div><div><div class="tpl-name">{html.escape(name)}'
                 f'</div><div class="tpl-desc">{html.escape(t["desc"])}</div><div>{tags}</div>{server}</div></div>',
                 unsafe_allow_html=True,
             )
             with play:
-                open_blank_button(load_template(t["file"]), "▶  Play in new tab")
+                if t.get("online"):
+                    cricket_launcher()
+                else:
+                    open_blank_button(load_template(t["file"]), "▶  Play in new tab")
             inspect.button("View code", key=f"inspect_{name}", on_click=inspect_template, args=(name,), width="stretch")
 
 

@@ -180,9 +180,7 @@
     <input class="field" id="auPass" type="password" placeholder="Password" autocomplete="current-password">
     <button class="primary" id="auGo">Sign in</button>
     <div class="formmsg" id="auMsg"></div>
-    <div class="label">Game server</div>
-    <input class="field" id="auServer" placeholder="http://192.168.1.20:8765" autocomplete="off" style="margin-top:0">
-    <div class="muted small" style="margin-top:6px">Both players must use the same server address.</div>
+    <div class="muted small" style="margin-top:4px">Your account and rooms are saved by the Cricket Live Hub app, so friends anywhere can join your room with its code.</div>
   </div>
 
   <div class="card hidden" id="scrLobby">
@@ -227,9 +225,6 @@
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
-
-  // Filled in by the Cricket Live Hub app with the address of its game server (game_server.py).
-  const SERVER_DEFAULT = "__GAME_SERVER__";
 
   if (!window.THREE) {
     $("scrHome").innerHTML = '<div class="msg-title">Couldn’t load the 3D engine</div>' +
@@ -294,10 +289,15 @@
     draw(c.getContext("2d"), w, h);
     const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
   }
-  scene.background = canvasTex(2, 256, (g, w, h) => {
+  scene.background = canvasTex(512, 512, (g, w, h) => {
     const gr = g.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, "#1e4f91"); gr.addColorStop(0.55, "#7fb6e6"); gr.addColorStop(1, "#d6ebfa");
+    gr.addColorStop(0, "#2a6fc9"); gr.addColorStop(0.6, "#86c1ef"); gr.addColorStop(1, "#e3f2fd");
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.fillStyle = "rgba(255,255,255,0.85)"; // soft cartoon clouds
+    for (let i = 0; i < 12; i++) {
+      const cx = Math.random() * w, cy = rand(24, h * 0.42), s = rand(16, 36);
+      for (let j = 0; j < 5; j++) { g.beginPath(); g.arc(cx + (j - 2) * s * 0.7, cy + Math.sin(j * 1.7) * s * 0.25, s * rand(0.6, 1), 0, Math.PI * 2); g.fill(); }
+    }
   });
   scene.fog = new THREE.Fog(0xbcd9f2, 160, 420);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x3b6b35, 0.8));
@@ -318,6 +318,11 @@
   ground.rotation.x = -Math.PI / 2; ground.position.copy(CENTER); ground.receiveShadow = true; scene.add(ground);
   const rope = new THREE.Mesh(new THREE.TorusGeometry(BOUNDARY, 0.18, 8, 160), M(0xffffff));
   rope.rotation.x = Math.PI / 2; rope.position.set(CENTER.x, 0.15, CENTER.z); scene.add(rope);
+  const dashGeo = new THREE.PlaneGeometry(0.9, 0.12), dashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 });
+  for (let i = 0; i < 80; i++) { // dashed 30-yard circle around the pitch
+    const a = (i / 80) * Math.PI * 2, d = new THREE.Mesh(dashGeo, dashMat);
+    d.rotation.set(-Math.PI / 2, 0, a); d.position.set(Math.sin(a) * 27, 0.02, -10.06 + Math.cos(a) * 27); scene.add(d);
+  }
   const adTex = canvasTex(2048, 64, (g, w, h) => {
     const ads = [["#0f172a", "#10b981", "CRICKET LEAGUE 3D"], ["#1d4ed8", "#ffffff", "HIT IT FOR SIX"],
       ["#f97316", "#111827", "LIVE HUB"], ["#9333ea", "#ffffff", "PLAY FAIR"]];
@@ -326,17 +331,23 @@
       g.fillStyle = fg; g.font = "900 34px Arial"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, i * w / 4 + w / 8, h / 2);
     });
   });
-  adTex.wrapS = THREE.RepeatWrapping; adTex.repeat.set(4, 1);
+  adTex.wrapS = THREE.RepeatWrapping; adTex.repeat.set(-4, 1); // negative = flipped, so the text reads correctly from inside the ground
   const boards = new THREE.Mesh(new THREE.CylinderGeometry(BOUNDARY + 3, BOUNDARY + 3, 1.1, 120, 1, true),
     new THREE.MeshBasicMaterial({ map: adTex, side: THREE.DoubleSide }));
   boards.position.set(CENTER.x, 0.55, CENTER.z); scene.add(boards);
-  const crowdTex = canvasTex(1024, 256, (g, w, h) => {
-    g.fillStyle = "#1f2937"; g.fillRect(0, 0, w, h);
-    const cols = ["#ef4444", "#3b82f6", "#facc15", "#f8fafc", "#10b981", "#f97316", "#a855f7", "#0ea5e9", "#ec4899"];
-    for (let y = 4; y < h; y += 9) for (let x = (y % 2) * 4; x < w; x += 8) {
-      if (Math.random() < 0.85) { g.fillStyle = pick(cols); g.globalAlpha = rand(0.5, 1); g.fillRect(x, y, 5, 6); }
+  const crowdTex = canvasTex(1024, 256, (g, w, h) => { // rows of seats with fans (shirt + head)
+    g.fillStyle = "#273449"; g.fillRect(0, 0, w, h);
+    const shirts = ["#ef4444", "#3b82f6", "#facc15", "#f8fafc", "#10b981", "#f97316", "#a855f7", "#0ea5e9", "#ec4899", "#004ba0", "#f9cd05"];
+    const skins = ["#f1c27d", "#e0ac69", "#c68e5e", "#8d5524"];
+    for (let y = 4, row = 0; y < h; y += 12, row++) {
+      g.fillStyle = row % 2 ? "#1f2a3b" : "#33425a"; g.fillRect(0, y + 7, w, 5);
+      for (let x = (row % 2) * 5; x < w; x += 10) {
+        if (Math.random() < 0.1) continue;
+        g.fillStyle = pick(shirts); g.fillRect(x + 1, y + 4, 8, 7);
+        g.fillStyle = pick(skins); g.beginPath(); g.arc(x + 5, y + 2.5, 3, 0, Math.PI * 2); g.fill();
+      }
     }
-    g.globalAlpha = 1; g.fillStyle = "rgba(0,0,0,.35)"; for (let y = 0; y < h; y += 36) g.fillRect(0, y, w, 3);
+    g.fillStyle = "rgba(0,0,0,.35)"; for (let y = 0; y < h; y += 48) g.fillRect(0, y, w, 3);
   });
   crowdTex.wrapS = THREE.RepeatWrapping; crowdTex.repeat.set(6, 1);
   const stands = new THREE.Mesh(new THREE.CylinderGeometry(124, 90, 28, 96, 1, true),
@@ -356,11 +367,16 @@
 
   // ---------------- pitch
   const pitchTex = canvasTex(128, 512, (g, w, h) => {
-    g.fillStyle = "#cdb57f"; g.fillRect(0, 0, w, h);
+    g.fillStyle = "#d4bc84"; g.fillRect(0, 0, w, h);
     for (let i = 0; i < 4000; i++) {
       g.fillStyle = `rgba(${Math.random() < .5 ? "95,72,38" : "255,243,210"},${Math.random() * 0.14})`;
       g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
     }
+    g.fillStyle = "rgba(120,90,50,0.3)"; // worn footmarks near both creases
+    for (const y0 of [70, h - 70]) for (let i = 0; i < 40; i++) {
+      g.beginPath(); g.ellipse(w / 2 + rand(-36, 36), y0 + rand(-28, 28), rand(4, 10), rand(6, 12), 0, 0, Math.PI * 2); g.fill();
+    }
+    g.fillStyle = "rgba(80,140,60,0.4)"; g.fillRect(0, 0, 5, h); g.fillRect(w - 5, 0, 5, h); // grass edges
   });
   const pitch = new THREE.Mesh(new THREE.PlaneGeometry(3.05, 24.4), new THREE.MeshLambertMaterial({ map: pitchTex }));
   pitch.rotation.x = -Math.PI / 2; pitch.position.set(0, 0.012, -10.06); pitch.receiveShadow = true; scene.add(pitch);
@@ -393,8 +409,10 @@
   })();
   const T = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp });
   const OUTLINE = new THREE.MeshBasicMaterial({ color: 0x15171d, side: THREE.BackSide });
-  const LEG = { thigh: 0.28, shin: 0.27, foot: 0.07 }, HIP_Y = 0.62;
-  const legH = (h, k) => LEG.thigh * Math.cos(h) + LEG.shin * Math.cos(h + k) + LEG.foot;
+  // Every limb is a capsule whose rounded ends sit exactly on its two joints, so arms and legs stay joined at any angle.
+  const LEG = { thigh: 0.28, shin: 0.25, foot: 0.09 }, ARM = { upper: 0.25, fore: 0.22 };
+  const HIP_Y = LEG.thigh + LEG.shin + LEG.foot;
+  const legH = (h, k) => LEG.thigh * Math.cos(h) + (LEG.shin + LEG.foot) * Math.cos(h + k);
   const GEO = {
     pelvis: new THREE.CapsuleGeometry(0.16, 0.14, 6, 14),
     torso: new THREE.CapsuleGeometry(0.21, 0.24, 8, 18),
@@ -408,12 +426,17 @@
     mouth: new THREE.BoxGeometry(0.075, 0.016, 0.012),
     nose: new THREE.SphereGeometry(0.032, 10, 8),
     ear: new THREE.SphereGeometry(0.05, 10, 8),
-    upper: new THREE.CapsuleGeometry(0.075, 0.12, 4, 12),
-    fore: new THREE.CapsuleGeometry(0.068, 0.1, 4, 12),
+    neck: new THREE.CapsuleGeometry(0.085, 0.1, 4, 12),
+    upper: new THREE.CapsuleGeometry(0.078, ARM.upper, 4, 12),
+    fore: new THREE.CapsuleGeometry(0.07, ARM.fore, 4, 12),
     hand: new THREE.SphereGeometry(0.085, 12, 10),
     glove: new THREE.BoxGeometry(0.16, 0.15, 0.16),
-    thigh: new THREE.CapsuleGeometry(0.1, 0.1, 4, 12),
-    shin: new THREE.CapsuleGeometry(0.088, 0.1, 4, 12),
+    thigh: new THREE.CapsuleGeometry(0.1, LEG.thigh, 4, 12),
+    shin: new THREE.CapsuleGeometry(0.088, LEG.shin, 4, 12),
+    sole: new THREE.BoxGeometry(0.176, 0.026, 0.31),
+    jersey: new THREE.PlaneGeometry(0.24, 0.24),
+    chest: new THREE.PlaneGeometry(0.15, 0.075),
+    sticker: new THREE.BoxGeometry(0.1, 0.13, 0.004),
     pad: new THREE.CapsuleGeometry(0.108, 0.17, 4, 12),
     shoe: new THREE.BoxGeometry(0.17, 0.1, 0.3),
     helmet: new THREE.SphereGeometry(0.3, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.47),
@@ -439,11 +462,29 @@
   }
   const group = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 
+  // Shirt numbers and team codes are drawn onto small canvas textures (cached per team + text).
+  const texCache = {};
+  function textTex(text, fg, outline, w, h, size) {
+    const k = [text, fg, outline, w, h].join("|");
+    return texCache[k] || (texCache[k] = canvasTex(w, h, (g) => {
+      g.font = `900 ${size}px Arial Black, Arial, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+      g.lineJoin = "round"; g.lineWidth = size * 0.14; g.strokeStyle = outline; g.strokeText(text, w / 2, h / 2 + size * 0.04);
+      g.fillStyle = fg; g.fillText(text, w / 2, h / 2 + size * 0.04);
+    }));
+  }
+  function setKitText(u, key) {
+    if (!u.backM) return;
+    const t = IPL[key];
+    u.backM.map = textTex(String(u.num), t.fg, hex(t.c2), 128, 128, 84); u.backM.needsUpdate = true;
+    u.chestM.map = textTex(key, t.fg, hex(t.c2), 128, 64, 36); u.chestM.needsUpdate = true;
+  }
+
   function makeBat() {
-    const g = new THREE.Group(), willow = T(0xf0d29b);
+    const g = new THREE.Group(), willow = T(0xf0d29b), sticker = T(0xe11d48);
     addPart(g, GEO.grip, T(0x1f2937), 0, -0.12, 0);
     addPart(g, GEO.blade, willow, 0, -0.49, 0);
     addPart(g, GEO.ridge, willow, 0, -0.5, 0.035, 1, 1, 1, false);
+    for (const z of [-0.029, 0.029]) addPart(g, GEO.sticker, sticker, 0, -0.36, z, 1, 1, 1, false);
     return g;
   }
 
@@ -456,8 +497,17 @@
     addPart(u.hips, GEO.pelvis, u.trouserM, 0, 0.02, 0, 1, 1, 0.82).rotation.z = Math.PI / 2;
     u.spine = group(u.hips, 0, 0.06, 0);
     addPart(u.spine, GEO.torso, u.shirtM, 0, 0.3, 0, 1.1, 1, 0.85);
-    addPart(u.spine, GEO.sash, u.accentM, 0, 0.36, 0, 1.12, 1, 0.87, false);
+    addPart(u.spine, GEO.sash, u.accentM, 0, 0.2, 0, 1.12, 1, 0.87, false); // waistband stripe
     addPart(u.spine, GEO.collar, u.accentM, 0, 0.58, 0, 1, 1, 1, false).rotation.x = Math.PI / 2;
+    addPart(u.spine, GEO.neck, skinM, 0, 0.62, 0, 1, 1, 1, false);
+    if (o.number) { // shirt number on the back, team code on the chest
+      u.num = o.number;
+      u.backM = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.35 });
+      u.chestM = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.35 });
+      const back = new THREE.Mesh(GEO.jersey, u.backM); back.position.set(0, 0.37, 0.19); u.spine.add(back);
+      const chest = new THREE.Mesh(GEO.chest, u.chestM); chest.position.set(0.075, 0.45, -0.178); chest.rotation.y = Math.PI; u.spine.add(chest);
+      setKitText(u, o.teamKey || "MI");
+    }
 
     u.headG = group(u.spine, 0, 0.6, 0);
     const face = group(u.headG, 0, 0.25, 0);
@@ -485,13 +535,16 @@
 
     for (const side of [-1, 1]) {
       const s = side < 0 ? "L" : "R";
-      const sh = group(u.spine, side * 0.27, 0.47, 0); addPart(sh, GEO.upper, u.shirtM, 0, -0.13, 0);
-      const el = group(sh, 0, -0.25, 0); addPart(el, GEO.fore, o.sleeves ? u.shirtM : skinM, 0, -0.11, 0);
-      if (o.gloves) addPart(el, GEO.glove, white, 0, -0.26, 0); else addPart(el, GEO.hand, skinM, 0, -0.25, 0);
-      const hp = group(u.hips, side * 0.11, 0, 0); addPart(hp, GEO.thigh, u.trouserM, 0, -0.14, 0);
-      const kn = group(hp, 0, -LEG.thigh, 0); addPart(kn, GEO.shin, u.trouserM, 0, -0.13, 0);
-      if (o.pads) addPart(kn, GEO.pad, white, 0, -0.12, -0.04, 1, 1, 0.75);
-      addPart(kn, GEO.shoe, shoeM, 0, -0.285, -0.05);
+      // shoulder and hip joints sit inside the body; each segment runs joint-to-joint
+      const sh = group(u.spine, side * 0.2, 0.46, 0); addPart(sh, GEO.upper, u.shirtM, 0, -ARM.upper / 2, 0);
+      const el = group(sh, 0, -ARM.upper, 0); addPart(el, GEO.fore, o.sleeves ? u.shirtM : skinM, 0, -ARM.fore / 2, 0);
+      if (o.gloves) addPart(el, GEO.glove, white, 0, -ARM.fore - 0.04, 0); else addPart(el, GEO.hand, skinM, 0, -ARM.fore - 0.04, 0);
+      const hp = group(u.hips, side * 0.1, 0, 0); addPart(hp, GEO.thigh, u.trouserM, 0, -LEG.thigh / 2, 0);
+      const kn = group(hp, 0, -LEG.thigh, 0); addPart(kn, GEO.shin, u.trouserM, 0, -LEG.shin / 2, 0);
+      if (o.pads) addPart(kn, GEO.pad, white, 0, -0.12, -0.045, 1, 1, 0.75);
+      const footY = -(LEG.shin + LEG.foot);
+      addPart(kn, GEO.shoe, shoeM, 0, footY + 0.05, -0.05);
+      addPart(kn, GEO.sole, u.accentM, 0, footY + 0.013, -0.05, 1, 1, 1, false);
       u["sh" + s] = sh; u["el" + s] = el; u["hip" + s] = hp; u["kn" + s] = kn;
     }
     root.userData = u; scene.add(root); stand(root); return root;
@@ -530,20 +583,21 @@
   }
   function face(p, x, z) { p.rotation.y = Math.atan2(-(x - p.position.x), -(z - p.position.z)); }
 
-  const kit = (c, extra) => Object.assign({ shirt: c, trousers: darken(c, 0.62), cap: c, accent: 0xffffff }, extra || {});
-  const batsman = makePlayer(kit(0x004ba0, { head: "helmet", pads: true, gloves: true, sleeves: true }));
+  const kit = (key, extra) => Object.assign({ shirt: IPL[key].c1, trousers: darken(IPL[key].c1, 0.62), cap: IPL[key].c1,
+    accent: IPL[key].c2, teamKey: key, number: 1 + Math.floor(Math.random() * 98) }, extra || {});
+  const batsman = makePlayer(kit("MI", { head: "helmet", pads: true, gloves: true, sleeves: true }));
   const batPivot = group(batsman, 0.02, 0.78, -0.42); batPivot.add(makeBat());
-  const nonStriker = makePlayer(kit(0x004ba0, { head: "helmet", pads: true, gloves: true, sleeves: true }));
+  const nonStriker = makePlayer(kit("MI", { head: "helmet", pads: true, gloves: true, sleeves: true }));
   const nsBat = makeBat(); nsBat.position.y = -0.24; nsBat.rotation.x = 0.15; nonStriker.userData.elR.add(nsBat);
-  const bowler = makePlayer(kit(0xf9cd05));
+  const bowler = makePlayer(kit("CSK"));
   const umpire = makePlayer({ shirt: 0x374151, trousers: 0x1f2937, cap: 0xffffff, accent: 0x111827, head: "umpire", sleeves: true });
   umpire.position.set(1.2, 0, -22.4); umpire.rotation.y = Math.PI;
-  const keeper = makePlayer(kit(0xf9cd05, { head: "helmet", pads: true, gloves: true, sleeves: true }));
+  const keeper = makePlayer(kit("CSK", { head: "helmet", pads: true, gloves: true, sleeves: true }));
   keeper.userData.home = V(0.15, 0, 2.6);
   const FIELD = [[6.5, Math.PI - 0.35], [22, 1.75], [27, 1.05], [26, 0.32], [26, -0.32], [28, -1.05], [22, -1.75], [52, -2.55], [56, -0.75]];
   const dirVec = (a) => V(Math.sin(a), 0, -Math.cos(a));
   const fielders = FIELD.map(([r, a]) => {
-    const f = makePlayer(kit(0xf9cd05));
+    const f = makePlayer(kit("CSK"));
     f.userData.home = V(0, 0, ZH).addScaledVector(dirVec(a), r); f.userData.ready = 0;
     return f;
   });
@@ -670,7 +724,7 @@
   function applyColors() {
     const set = (p, key, helmet) => {
       const t = IPL[key], u = p.userData;
-      u.shirtM.color.setHex(t.c1); u.trouserM.color.setHex(darken(t.c1, 0.62)); u.accentM.color.setHex(t.c2);
+      u.shirtM.color.setHex(t.c1); u.trouserM.color.setHex(darken(t.c1, 0.62)); u.accentM.color.setHex(t.c2); setKitText(u, key);
       u.capM.color.setHex(helmet ? darken(t.c1, 0.6) : t.c1);
     };
     const bk = S.teams[S.inn.bat].key, fk = S.teams[S.inn.bowl].key;
@@ -1128,52 +1182,32 @@
     camera.lookAt(camLook);
   }
 
-  // ================================================================ online (talks to game_server.py)
-  const API = { base: "", token: store.get("cl3d_token") };
-  function defaultServer() {
-    if (/^https?:$/.test(location.protocol)) return location.origin;           // the game server is hosting this page
-    if (SERVER_DEFAULT && !SERVER_DEFAULT.startsWith("__")) return SERVER_DEFAULT; // address passed in by the Streamlit app
-    return store.get("cl3d_server") || "";
-  }
-  function normalizeServer(s) {
-    s = (s || "").trim().replace(/\/+$/, "");
-    if (s && !/^https?:\/\//i.test(s)) s = "http://" + s;
-    return s;
-  }
+  // ================================================================ online (accounts + rooms live in the app's cricket_multiplayer.db)
+  // The game talks to the Cricket Live Hub tab that opened it; that tab passes each request to multiplayer.py.
+  const API = { token: store.get("cl3d_token") };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  async function api(path, body, timeoutMs) {
-    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), timeoutMs || 10000);
-    let res;
-    try {
-      res = await fetch(API.base + path, {
-        method: body ? "POST" : "GET", signal: ctrl.signal,
-        headers: Object.assign({ "Content-Type": "application/json" }, API.token ? { Authorization: "Bearer " + API.token } : {}),
-        body: body ? JSON.stringify(body) : undefined,
-      });
-    } catch (e) {
-      const err = new Error(unreachableText()); err.network = true; throw err;
-    } finally { clearTimeout(timer); }
-    let data = {};
-    try { data = await res.json(); } catch (e) { /* empty body */ }
-    if (!res.ok) { const err = new Error(data.error || `Server error (${res.status})`); err.status = res.status; throw err; }
-    return data;
-  }
-  function unreachableText() {
-    let t = `Can't reach the game server at <b>${esc(API.base || "(no address)")}</b>. Check that it's running and that you're on the same network.`;
-    if (window.isSecureContext && /^http:/.test(API.base) && !/localhost|127\.0\.0\.1/.test(API.base)) {
-      t += ` Your browser blocks it from this secure (https) page, so open <b>${esc(API.base)}</b> directly in a new tab and play from there.`;
+  const NO_BRIDGE = "Online play works when you start the game with the <b>▶ Play in new tab</b> button in the " +
+    "Cricket Live Hub app. Keep the app's tab open while you play.";
+  function bridge() {
+    for (const w of [window.opener, window.parent]) {
+      try { if (w && w !== window && !w.closed && w.__cricketBridge) return w.__cricketBridge; } catch (e) { /* not reachable */ }
     }
-    return t;
+    return null;
+  }
+  async function call(op, data) {
+    const b = bridge();
+    if (!b) { const e = new Error(NO_BRIDGE); e.status = 0; throw e; }
+    const r = await b.request(op, Object.assign({ token: API.token }, data || {}));
+    if (r && r.error) { const e = new Error(esc(r.error)); e.status = r.status; throw e; }
+    return r;
   }
 
   async function goOnline() {
     screen("scrAuth");
-    $("auServer").value = defaultServer();
-    formMsg("auMsg", "");
-    API.base = normalizeServer($("auServer").value);
-    if (API.token && API.base) {
+    formMsg("auMsg", bridge() ? "" : NO_BRIDGE);
+    if (API.token && bridge()) {
       formMsg("auMsg", "Signing you in…", true);
-      try { const r = await api("/api/me"); S.me = r.profile; formMsg("auMsg", ""); openLobby(); }
+      try { const r = await call("me"); S.me = r.profile; formMsg("auMsg", ""); openLobby(); }
       catch (e) { if (e.status === 401) { API.token = null; store.set("cl3d_token", null); formMsg("auMsg", ""); } else formMsg("auMsg", e.message); }
     }
   }
@@ -1189,17 +1223,14 @@
   }
   async function submitAuth() {
     const username = $("auUser").value.trim(), password = $("auPass").value;
-    API.base = normalizeServer($("auServer").value);
-    if (!API.base) return formMsg("auMsg", "Enter the game server address first (ask whoever is running it).");
     if (!username || !password) return formMsg("auMsg", "Enter a username and password.");
     if (authTab === "up" && !/^[A-Za-z0-9_]{3,16}$/.test(username)) return formMsg("auMsg", "Usernames are 3–16 letters, numbers or _.");
     if (authTab === "up" && password.length < 6) return formMsg("auMsg", "Passwords need at least 6 characters.");
     $("auGo").disabled = true;
     try {
       API.token = null;
-      const r = await api(authTab === "up" ? "/api/signup" : "/api/login", { username, password });
-      API.token = r.token; S.me = r.profile;
-      store.set("cl3d_token", r.token); store.set("cl3d_server", API.base);
+      const r = await call(authTab === "up" ? "signup" : "login", { username, password });
+      API.token = r.token; S.me = r.profile; store.set("cl3d_token", r.token);
       $("auPass").value = ""; openLobby();
     } catch (e) { formMsg("auMsg", e.message); }
     finally { $("auGo").disabled = false; }
@@ -1209,14 +1240,14 @@
     $("lbBadge").innerHTML = badgeHTML(me.team);
     $("lbName").textContent = me.username;
     $("lbRecord").textContent = `${me.wins} win${me.wins === 1 ? "" : "s"} · ${me.losses} loss${me.losses === 1 ? "" : "es"}`;
-    renderPicker($("pickOnline"), me.team, (k) => { me.team = k; api("/api/team", { team: k }).catch(() => {}); openLobby(); });
+    renderPicker($("pickOnline"), me.team, (k) => { me.team = k; call("team", { team: k }).catch(() => {}); openLobby(); });
     renderChips($("oversChipsOnline"), [1, 2, 3, 5, 10], S.setup.overs, (v) => { S.setup.overs = v; openLobby(); }, null, true);
     renderChips($("wktChipsOnline"), [1, 2, 3, 5, 10], S.setup.wkts, (v) => { S.setup.wkts = v; openLobby(); });
     renderHome(); screen("scrLobby");
   }
   async function createRoom() {
     formMsg("lbMsg", ""); $("createRoom").disabled = true;
-    try { enterRoom(await api("/api/room/create", { overs: S.setup.overs, wkts: S.setup.wkts }), true); }
+    try { enterRoom(await call("room_create", { overs: S.setup.overs, wkts: S.setup.wkts }), true); }
     catch (e) { formMsg("lbMsg", e.message); }
     finally { $("createRoom").disabled = false; }
   }
@@ -1224,7 +1255,7 @@
     const code = $("joinCode").value.toUpperCase().trim();
     if (!/^[A-Z0-9]{5}$/.test(code)) return formMsg("lbMsg", "Enter the 5-character room code.");
     formMsg("lbMsg", "");
-    try { enterRoom(await api("/api/room/join", { code }), false); } catch (e) { formMsg("lbMsg", e.message); }
+    try { enterRoom(await call("room_join", { code }), false); } catch (e) { formMsg("lbMsg", e.message); }
   }
   function enterRoom(r, isHost) {
     const net = { code: r.code, isHost, peer: null, room: null, inMatch: false, since: r.since, chain: Promise.resolve(), fails: 0 };
@@ -1233,10 +1264,11 @@
     applyRoom(r.room); screen("scrRoom");
     pollLoop(net);
   }
+  // Checks the room for new messages (deliveries, results, players joining or leaving) a few times a second.
   async function pollLoop(net) {
     while (S.net === net) {
       try {
-        const r = await api(`/api/poll?code=${net.code}&since=${net.since}`, null, 30000);
+        const r = await call("poll", { code: net.code, since: net.since });
         net.fails = 0;
         for (const ev of r.events) {
           if (S.net !== net) return;
@@ -1246,14 +1278,15 @@
       } catch (e) {
         if (S.net !== net) return;
         if (e.status === 404 || e.status === 403) return roomClosed(net.inMatch ? "Your opponent left the match." : "This room has closed.");
-        if (++net.fails >= 5) return roomClosed("Lost connection to the game server.");
-        await sleep(1000);
+        if (e.status === 401) return roomClosed("Please sign in again.");
+        if (++net.fails >= 6) return roomClosed("Lost connection to the app. Keep the Cricket Live Hub tab open while you play.");
       }
+      await sleep(600);
     }
   }
   function send(payload) {
     const net = S.net; if (!net) return;
-    net.chain = net.chain.then(() => api("/api/send", { code: net.code, payload })).catch(() => {});
+    net.chain = net.chain.then(() => call("send", { code: net.code, payload })).catch(() => {});
   }
   function applyRoom(room) {
     const net = S.net; if (!net) return;
@@ -1272,7 +1305,7 @@
     $("roomHost").innerHTML = side(host); $("roomGuest").innerHTML = side(guest);
     const mine = net.room.players.find((p) => p.id === S.me.id);
     renderPicker($("pickRoom"), mine ? mine.team : S.me.team, (k) => {
-      S.me.team = k; api("/api/room/team", { code: net.code, team: k }).catch((e) => formMsg("roomMsg", e.message));
+      S.me.team = k; call("room_team", { code: net.code, team: k }).catch((e) => formMsg("roomMsg", e.message));
     }, net.peer ? net.peer.team : null);
     const sameTeam = net.peer && mine && net.peer.team === mine.team;
     $("roomStart").classList.toggle("hidden", !net.isHost);
@@ -1287,13 +1320,13 @@
     S.net = null;
     if (wasInMatch || S.mode === "online") {
       S.token++; S.phase = "paused"; $("hud").classList.add("hidden");
-      showMsg("Match ended", `<p>${esc(text)}</p>`, [{ label: "Back to lobby", fn: backToLobby }]);
-    } else { openLobby(); formMsg("lbMsg", esc(text)); }
+      showMsg("Match ended", `<p>${text}</p>`, [{ label: "Back to lobby", fn: backToLobby }]);
+    } else { openLobby(); formMsg("lbMsg", text); }
   }
   function backToLobby() { S.token++; S.phase = "menu"; S.inn = null; S.mode = null; resetField(); $("hud").classList.add("hidden"); hideMsg(); openLobby(); }
   function leaveRoom() {
     const net = S.net;
-    if (net) { S.net = null; api("/api/room/leave", { code: net.code }).catch(() => {}); }
+    if (net) { S.net = null; call("room_leave", { code: net.code }).catch(() => {}); }
     backToLobby();
   }
   function opponentLeft() {
@@ -1304,7 +1337,7 @@
   function recordResult(winner) {
     if (!S.me || winner === null) return;
     const meIdx = S.teams.findIndex((t) => t.kind === "human");
-    api("/api/result", { won: winner === meIdx }).then((r) => { S.me = r.profile; }).catch(() => {});
+    call("result", { won: winner === meIdx }).then((r) => { S.me = r.profile; }).catch(() => {});
   }
   function hostStart() {
     const net = S.net; if (!net || !net.isHost || !net.peer) return;
@@ -1334,7 +1367,8 @@
     }
   }
   window.addEventListener("pagehide", () => {
-    if (S.net && API.token && navigator.sendBeacon) navigator.sendBeacon(API.base + "/api/room/leave", JSON.stringify({ code: S.net.code, token: API.token }));
+    const b = bridge();
+    if (S.net && b && API.token) b.request("room_leave", { token: API.token, code: S.net.code });
   });
 
   // ================================================================ menus wiring
@@ -1356,7 +1390,7 @@
   $("auGo").onclick = submitAuth;
   $("auPass").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAuth(); });
   $("signOut").onclick = () => {
-    api("/api/logout", {}).catch(() => {});
+    call("logout").catch(() => {});
     API.token = null; store.set("cl3d_token", null); S.me = null; renderHome(); screen("scrHome");
   };
   $("createRoom").onclick = createRoom;

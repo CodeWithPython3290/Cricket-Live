@@ -14,7 +14,7 @@ streamlit run streamlit_app.py
 
 ## Deploy
 
-1. Push this folder to a public GitHub repository, including the `templates` folder and `game_server.py`.
+1. Push this folder to a public GitHub repository, including the `templates` folder and `multiplayer.py`.
 2. Go to [share.streamlit.io](https://share.streamlit.io), sign in with GitHub, and click **Create app**.
 3. Select the repository, branch `main`, and main file `streamlit_app.py`, then click **Deploy**.
 
@@ -28,31 +28,33 @@ A cartoon cricket game. Pick an IPL team, choose how many overs and wickets to p
 
 ### Online play
 
-Online play runs on `game_server.py`, a small server in this project. It uses only Python's standard library, so there's nothing extra to install or sign up for. The server:
+Online multiplayer is built into the app. Everything is stored in **`cricket_multiplayer.db`**, a SQLite file the app creates next to `streamlit_app.py`:
 
-- stores player accounts (username and password; passwords are salted and hashed) in `game_data.db`, a local SQLite file that isn't uploaded to GitHub
-- runs match rooms with 5-letter codes
-- passes each ball between the two players
-- serves the game page itself
+| Table | What it holds |
+|---|---|
+| `users`, `sessions` | Player accounts (username, plus a salted and hashed password) and sign-in tokens |
+| `rooms`, `room_players` | Match rooms with 5-letter codes, and who's in each one |
+| `events` | The messages the two games send each other: every delivery and result |
 
-**The server starts automatically** when you run the Streamlit app. Its address, such as `http://192.168.1.20:8765`, is shown on the game's template card. You can also run it on its own:
+How it fits together:
 
-```bash
-python game_server.py          # add --port 9000 to use a different port
-```
+- **The game:** `templates/cricket_league_3d.html`.
+- **The bridge:** the game's **▶ Play in new tab** button is a small Streamlit component (`templates/index.html`). It opens the game, and the game sends its online requests through it.
+- **The server side:** `streamlit_app.py` passes each request to `multiplayer.py`, which reads and writes the database.
+
+Because it all runs inside the Streamlit app, **anyone who can open the deployed app, anywhere, can play**.
 
 **To play a friend:**
 
-1. Run the app (or `game_server.py`) on one computer.
-2. Both players open the server address in a browser. The computer running the server can also use **▶ Play in new tab** in the app.
-3. Each player clicks **Play online** and creates an account (or signs in).
-4. One player clicks **Create a room** and shares the 5-letter code. The other types it in and clicks **Join**. The host then clicks **Start match**.
+1. Both players open the app (for example, your Streamlit Cloud link) and click **▶ Play in new tab** on the game card.
+2. Each player clicks **Play online** and creates an account (or signs in).
+3. One player clicks **Create a room** and shares the 5-letter code. The other types it in and clicks **Join**. The host then clicks **Start match**.
 
 **Good to know:**
 
-- Both computers must be on the **same network** (same Wi-Fi). To play over the internet, the server has to be reachable from outside your network, for example through port forwarding on your router.
-- On **Streamlit Community Cloud**, the server starts but other computers can't reach it, because Streamlit Cloud only exposes the app's own web page. For online matches, run the app or `game_server.py` on your own computer.
-- If Windows asks whether to allow Python through the firewall, click **Allow** (private networks). Otherwise friends can't connect.
+- **Keep the app's tab open** while you play online, because the game talks to the database through it.
+- **Accounts can be wiped on Streamlit Community Cloud.** Its disk isn't permanent, so the database is wiped whenever the app restarts or is redeployed, and players then need to create accounts again. Run the app on your own computer or server to keep accounts permanently.
+- **`cricket_multiplayer.db` isn't uploaded to GitHub.** It's listed in `.gitignore`.
 
 ## Data sources
 
