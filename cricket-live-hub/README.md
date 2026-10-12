@@ -14,49 +14,45 @@ streamlit run streamlit_app.py
 
 ## Deploy
 
-1. Push this folder to a public GitHub repository, including the `templates` folder.
+1. Push this folder to a public GitHub repository, including the `templates` folder and `game_server.py`.
 2. Go to [share.streamlit.io](https://share.streamlit.io), sign in with GitHub, and click **Create app**.
 3. Select the repository, branch `main`, and main file `streamlit_app.py`, then click **Deploy**.
 
 ## 3D Cricket League
 
-Pick an IPL team and play:
-
-- **vs CPU**: Easy, Medium or Hard.
-- **2 Players**: two people take turns on one keyboard.
-- **Online**: players create accounts and play each other from different computers.
-
-The match setup screen lets you choose the number of overs and wickets.
+A cartoon cricket game. Pick an IPL team, choose how many overs and wickets to play, then take on the CPU (Easy, Medium or Hard) or a friend online.
 
 | | Batting | Bowling |
 |---|---|---|
 | Keys | `Space` / click to swing · hold `←` `→` to aim · hold `↑` to loft · hold `↓` to defend | `A` `D` line · `W` `S` length · `Q` fast/spin · `F` bowl |
 
-### Online play setup (one time, about 5 minutes)
+### Online play
 
-Online play uses a free [Supabase](https://supabase.com) project for accounts and live match rooms.
+Online play runs on `game_server.py`, a small server in this project. It uses only Python's standard library, so there's nothing extra to install or sign up for. The server:
 
-1. **Create a project.** Sign in at supabase.com, then click **New project**. Any name and region will do.
-2. **Create the accounts table.** Open **SQL Editor → New query**, paste in all of [`supabase_setup.sql`](supabase_setup.sql), and click **Run**.
-3. **Email confirmation (optional).** Go to **Authentication → Sign In / Providers → Email**. If you turn off **Confirm email**, players can play as soon as they sign up. If you leave it on, they must click a link in their inbox first.
-4. **Copy your keys.** Go to **Project Settings → API** (or **Data API**) and copy the **Project URL** and the **anon public** key.
-5. **Give the keys to the app:**
-   - **Streamlit Community Cloud:** open your app → **⋮ → Settings → Secrets**, paste the lines below, and save.
-   - **Running locally:** copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and fill it in. This file is git-ignored, so it won't be uploaded to GitHub.
+- stores player accounts (username and password; passwords are salted and hashed) in `game_data.db`, a local SQLite file that isn't uploaded to GitHub
+- runs match rooms with 5-letter codes
+- passes each ball between the two players
+- serves the game page itself
 
-   ```toml
-   [supabase]
-   url = "https://YOUR-PROJECT-ID.supabase.co"
-   anon_key = "YOUR-ANON-PUBLIC-KEY"
-   ```
+**The server starts automatically** when you run the Streamlit app. Its address, such as `http://192.168.1.20:8765`, is shown on the game's template card. You can also run it on its own:
 
-6. Restart the app. The game's template card now shows **🌐 Online ready**.
+```bash
+python game_server.py          # add --port 9000 to use a different port
+```
 
-**How a match works:** each player clicks **Play online** and signs in. One player clicks **Create a room** and shares the 5-letter code. The other enters the code and clicks **Join**. The host then clicks **Start match**.
+**To play a friend:**
 
-Each player's wins and losses are saved to their account.
+1. Run the app (or `game_server.py`) on one computer.
+2. Both players open the server address in a browser. The computer running the server can also use **▶ Play in new tab** in the app.
+3. Each player clicks **Play online** and creates an account (or signs in).
+4. One player clicks **Create a room** and shares the 5-letter code. The other types it in and clicks **Join**. The host then clicks **Start match**.
 
-> The anon key is designed to be public. It appears in the game page's code, and Supabase's row-level security (set up by the SQL script) stops players from editing anyone's account but their own. Never put the **service_role** key in the app.
+**Good to know:**
+
+- Both computers must be on the **same network** (same Wi-Fi). To play over the internet, the server has to be reachable from outside your network, for example through port forwarding on your router.
+- On **Streamlit Community Cloud**, the server starts but other computers can't reach it, because Streamlit Cloud only exposes the app's own web page. For online matches, run the app or `game_server.py` on your own computer.
+- If Windows asks whether to allow Python through the firewall, click **Allow** (private networks). Otherwise friends can't connect.
 
 ## Data sources
 

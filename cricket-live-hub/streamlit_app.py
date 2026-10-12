@@ -22,6 +22,8 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
+import game_server
+
 SCORES_FEED = "https://static.cricinfo.com/rss/livescores.xml"
 REFRESH_SECONDS = 30
 
@@ -30,8 +32,8 @@ TEMPLATES = {
     "3D Cricket League": {
         "file": "cricket_league_3d.html",
         "icon": "🏏",
-        "desc": "Arcade-style 3D cricket with IPL teams. Play the CPU, a friend on the same keyboard, "
-                "or sign in and play a friend online on another computer.",
+        "desc": "Cartoon 3D cricket with IPL teams. Play the CPU, or create an account and play "
+                "a friend on another computer.",
         "tags": ["Game", "3D", "Online multiplayer"],
         "online": True,
     },
@@ -541,23 +543,17 @@ def page_head(eyebrow, title, subtitle, meta):
     )
 
 
-def supabase_config():
-    """(url, anon_key) from .streamlit/secrets.toml or the Streamlit Cloud secrets, or None."""
-    try:
-        cfg = st.secrets["supabase"]
-        return str(cfg["url"]).strip(), str(cfg["anon_key"]).strip()
-    except Exception:
-        return None
+@st.cache_resource(show_spinner=False)
+def game_server_url():
+    """Start the online game server (game_server.py) once, in the background, and return its address."""
+    game_server.start_in_background(game_server.DEFAULT_PORT)
+    return f"http://{game_server.lan_ip()}:{game_server.DEFAULT_PORT}"
 
 
 @st.cache_data(show_spinner=False)
 def load_template(file_name):
     content = (TEMPLATE_DIR / file_name).read_text(encoding="utf-8")
-    cfg = supabase_config()
-    if cfg:  # the anon key is designed to be public; row-level security protects the data
-        url, key = (json.dumps(v)[1:-1] for v in cfg)
-        content = content.replace("__SUPABASE_URL__", url).replace("__SUPABASE_ANON_KEY__", key)
-    return content
+    return content.replace("__GAME_SERVER__", game_server_url())
 
 
 def inspect_template(template_name):
@@ -572,12 +568,14 @@ def templates_gallery():
         with st.container(border=True):
             info, play, inspect = st.columns([3.4, 1.3, 1], vertical_alignment="center", gap="medium")
             tags = "".join(f'<span class="tpl-tag">{html.escape(tag)}</span>' for tag in t["tags"])
+            server = ""
             if t.get("online"):
-                tags += ('<span class="tpl-tag">🌐 Online ready</span>' if supabase_config()
-                         else '<span class="tpl-tag" style="opacity:.6">Online play: add Supabase keys (see README)</span>')
+                url = html.escape(game_server_url())
+                server = (f'<div class="tpl-desc" style="margin-top:6px">🌐 Online server running at <b>{url}</b>. '
+                          f'Friends on the same Wi-Fi can play by opening <a href="{url}" target="_blank">{url}</a>.</div>')
             info.markdown(
                 f'<div class="tpl"><div class="tpl-icon">{t["icon"]}</div><div><div class="tpl-name">{html.escape(name)}'
-                f'</div><div class="tpl-desc">{html.escape(t["desc"])}</div><div>{tags}</div></div></div>',
+                f'</div><div class="tpl-desc">{html.escape(t["desc"])}</div><div>{tags}</div>{server}</div></div>',
                 unsafe_allow_html=True,
             )
             with play:

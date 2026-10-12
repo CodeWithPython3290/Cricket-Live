@@ -17,7 +17,6 @@
   .hidden { display: none !important; }
   kbd { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 6px; font: 700 11px Inter, sans-serif;
     background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); border-bottom-width: 2px; text-align: center; color: #fff; }
-  .card kbd { background: #f1f5f9; border-color: #cbd5e1; color: var(--ink); }
 
   /* ---------- menus ---------- */
   .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20;
@@ -30,10 +29,10 @@
   h1 span { color: var(--accent); }
   .muted { color: var(--muted); } .small { font-size: 13px; } .center { text-align: center; }
   .stack { display: grid; gap: 10px; margin: 22px 0 8px; }
-  .big { display: flex; align-items: center; gap: 14px; padding: 15px 18px; border-radius: 14px; border: 1px solid var(--line);
+  .big { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line);
     background: #f8fafc; font-size: 16px; font-weight: 700; color: var(--ink); text-align: left; transition: all .15s; }
   .big:hover { border-color: var(--accent); background: #ecfdf5; transform: translateY(-1px); }
-  .big .ic { font-size: 24px; } .big small { display: block; font-weight: 500; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .big .ic { font-size: 26px; } .big small { display: block; font-weight: 500; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
   .head { display: flex; align-items: center; gap: 12px; }
   .head h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
   .back { width: 38px; height: 38px; flex: none; border-radius: 11px; border: 1px solid var(--line); background: #fff; font-size: 18px; color: var(--ink); }
@@ -68,7 +67,7 @@
   .tabs { display: grid; grid-template-columns: 1fr 1fr; background: #f1f5f9; border-radius: 12px; padding: 4px; margin: 18px 0 6px; }
   .tabs button { border: 0; background: transparent; padding: 10px; border-radius: 9px; font-weight: 700; color: var(--muted); }
   .tabs button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-  .formmsg { margin-top: 12px; font-size: 14px; color: #dc2626; min-height: 18px; }
+  .formmsg { margin-top: 12px; font-size: 14px; color: #dc2626; min-height: 18px; line-height: 1.5; }
   .formmsg.ok { color: var(--accent-d); }
   .me { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #f8fafc; margin-top: 16px; }
   .me .grow { flex: 1; }
@@ -130,7 +129,7 @@
   #toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 999px;
     background: rgba(16,185,129,.95); color: #fff; font-weight: 700; font-size: 13px; opacity: 0; pointer-events: none; }
   #toast.show { animation: fade 2.2s ease forwards; }
-  @media (max-width: 560px) { .teams { grid-template-columns: repeat(5, 1fr); } .grid2 { grid-template-columns: 1fr; } #flash .ft { font-size: 60px; } }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } #flash .ft { font-size: 60px; } }
 </style>
 </head>
 <body>
@@ -157,33 +156,33 @@
     <div class="muted">Pick your IPL side and play.</div>
     <div class="stack">
       <button class="big" data-go="cpu"><span class="ic">🤖</span><span>Play vs CPU<small>Quick match against the computer</small></span></button>
-      <button class="big" data-go="local"><span class="ic">👥</span><span>2 Players<small>Take turns on this computer</small></span></button>
       <button class="big" data-go="online"><span class="ic">🌐</span><span>Play online<small>Sign in and play a friend on another computer</small></span></button>
     </div>
     <div id="homeUser" class="muted small center"></div>
   </div>
 
   <div class="card hidden" id="scrSetup">
-    <div class="head"><button class="back" data-back="scrHome">←</button><h2 id="setupTitle">Play vs CPU</h2></div>
-    <div class="label" id="pick1Label">Your team</div>
+    <div class="head"><button class="back" data-back="scrHome">←</button><h2>Play vs CPU</h2></div>
+    <div class="label">Your team</div>
     <div class="teams" id="pick1"></div>
-    <div id="pick2Wrap"><div class="label">Player 2 team</div><div class="teams" id="pick2"></div></div>
     <div class="grid2">
       <div><div class="label">Overs</div><div class="chips" id="oversChips"></div></div>
       <div><div class="label">Wickets</div><div class="chips" id="wktChips"></div></div>
     </div>
-    <div id="diffWrap"><div class="label">Difficulty</div><div class="chips" id="diffChips"></div></div>
+    <div class="label">Difficulty</div><div class="chips" id="diffChips"></div>
     <button class="primary" id="setupStart">Start match</button>
   </div>
 
   <div class="card hidden" id="scrAuth">
     <div class="head"><button class="back" data-back="scrHome">←</button><h2>Play online</h2></div>
     <div class="tabs" id="authTabs"><button data-tab="in" class="on">Sign in</button><button data-tab="up">Create account</button></div>
-    <input class="field hidden" id="auUser" placeholder="Username (3–16 letters, numbers or _)" maxlength="16" autocomplete="username">
-    <input class="field" id="auEmail" type="email" placeholder="Email" autocomplete="email">
-    <input class="field" id="auPass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password">
+    <input class="field" id="auUser" placeholder="Username" maxlength="16" autocomplete="username">
+    <input class="field" id="auPass" type="password" placeholder="Password" autocomplete="current-password">
     <button class="primary" id="auGo">Sign in</button>
     <div class="formmsg" id="auMsg"></div>
+    <div class="label">Game server</div>
+    <input class="field" id="auServer" placeholder="http://192.168.1.20:8765" autocomplete="off" style="margin-top:0">
+    <div class="muted small" style="margin-top:6px">Both players must use the same server address.</div>
   </div>
 
   <div class="card hidden" id="scrLobby">
@@ -224,23 +223,19 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
 
-  // Filled in by the Cricket Live Hub app from its Supabase secrets.
-  const SB_URL = "__SUPABASE_URL__";
-  const SB_KEY = "__SUPABASE_ANON_KEY__";
+  // Filled in by the Cricket Live Hub app with the address of its game server (game_server.py).
+  const SERVER_DEFAULT = "__GAME_SERVER__";
 
   if (!window.THREE) {
     $("scrHome").innerHTML = '<div class="msg-title">Couldn’t load the 3D engine</div>' +
       '<p class="msg-body">This game needs an internet connection to load. Check your connection and reload.</p>';
     return;
   }
-  let sb = null;
-  try { if (window.supabase && /^https?:\/\//.test(SB_URL)) sb = window.supabase.createClient(SB_URL, SB_KEY); } catch (e) { sb = null; }
 
   // ================================================================ utils
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -255,6 +250,10 @@
   const M = (c) => new THREE.MeshLambertMaterial({ color: c });
   const hex = (n) => "#" + n.toString(16).padStart(6, "0");
   const darken = (n, f) => (Math.round(((n >> 16) & 255) * f) << 16) | (Math.round(((n >> 8) & 255) * f) << 8) | Math.round((n & 255) * f);
+  const store = {
+    get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } },
+  };
 
   const G = 9.8, ZH = -1.2, BAT_Z = -0.95, BOWL_STUMPS = -20.12, BOUNDARY = 65, RUNUP = 1.1;
   const CENTER = V(0, 0, -10);
@@ -263,9 +262,9 @@
     CSK: { name: "Chennai Super Kings", c1: 0xf9cd05, c2: 0x1b4fa0, fg: "#111" },
     MI: { name: "Mumbai Indians", c1: 0x004ba0, c2: 0xd1ab3e, fg: "#fff" },
     RCB: { name: "Royal Challengers Bengaluru", c1: 0xd11d1d, c2: 0x1a1a1a, fg: "#fff" },
-    KKR: { name: "Kolkata Knight Riders", c1: 0x3a225d, c2: 0xb3a123, fg: "#fff" },
+    KKR: { name: "Kolkata Knight Riders", c1: 0x3a225d, c2: 0xd4af37, fg: "#fff" },
     DC: { name: "Delhi Capitals", c1: 0x17449b, c2: 0xef1b23, fg: "#fff" },
-    PBKS: { name: "Punjab Kings", c1: 0xdd1f2d, c2: 0xb8bcc2, fg: "#fff" },
+    PBKS: { name: "Punjab Kings", c1: 0xdd1f2d, c2: 0xd9dde2, fg: "#fff" },
     RR: { name: "Rajasthan Royals", c1: 0xea1a85, c2: 0x254aa5, fg: "#fff" },
     SRH: { name: "Sunrisers Hyderabad", c1: 0xf26522, c2: 0x111111, fg: "#fff" },
     GT: { name: "Gujarat Titans", c1: 0x1b2133, c2: 0xdbbe6e, fg: "#fff" },
@@ -301,7 +300,7 @@
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
   });
   scene.fog = new THREE.Fog(0xbcd9f2, 160, 420);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x3b6b35, 0.78));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3b6b35, 0.8));
   const sun = new THREE.DirectionalLight(0xffffff, 0.85);
   sun.position.set(25, 55, -30); sun.target.position.set(0, 0, -8);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004;
@@ -374,7 +373,7 @@
     const sm = M(0xf4e4bc), parts = [], bails = [];
     for (const x of [-0.11, 0, 0.11]) {
       const p = new THREE.Group(); p.position.x = x;
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.71, 8), sm); m.position.y = 0.355; m.castShadow = true;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.71, 8), sm); m.position.y = 0.355; m.castShadow = true;
       p.add(m); g.add(p); parts.push(p);
     }
     for (const x of [-0.055, 0.055]) {
@@ -386,82 +385,113 @@
   const stumps = makeStumps(0);
   makeStumps(BOWL_STUMPS);
 
-  // ================================================================ players (jointed, rounded bodies)
+  // ================================================================ cartoon players
+  // Chunky "Cricket League" style: big round heads with faces, short limbs, cel shading and black outlines.
+  const toonRamp = (() => {
+    const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 195, 195, 195, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat);
+    t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
+  })();
+  const T = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp });
+  const OUTLINE = new THREE.MeshBasicMaterial({ color: 0x15171d, side: THREE.BackSide });
+  const LEG = { thigh: 0.28, shin: 0.27, foot: 0.07 }, HIP_Y = 0.62;
+  const legH = (h, k) => LEG.thigh * Math.cos(h) + LEG.shin * Math.cos(h + k) + LEG.foot;
   const GEO = {
-    pelvis: new THREE.CapsuleGeometry(0.13, 0.16, 4, 12),
-    torso: new THREE.CapsuleGeometry(0.16, 0.3, 6, 16),
-    neck: new THREE.CylinderGeometry(0.05, 0.058, 0.12, 10),
-    head: new THREE.SphereGeometry(0.105, 20, 16),
-    nose: new THREE.BoxGeometry(0.03, 0.045, 0.04),
-    ear: new THREE.SphereGeometry(0.022, 8, 6),
-    upper: new THREE.CapsuleGeometry(0.056, 0.2, 4, 10),
-    fore: new THREE.CapsuleGeometry(0.047, 0.19, 4, 10),
-    hand: new THREE.SphereGeometry(0.046, 10, 8),
-    glove: new THREE.BoxGeometry(0.1, 0.11, 0.11),
-    thigh: new THREE.CapsuleGeometry(0.078, 0.29, 4, 10),
-    shin: new THREE.CapsuleGeometry(0.061, 0.318, 4, 10),
-    pad: new THREE.BoxGeometry(0.16, 0.5, 0.1),
-    shoe: new THREE.BoxGeometry(0.1, 0.075, 0.26),
-    helmet: new THREE.SphereGeometry(0.128, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.56),
-    peak: new THREE.BoxGeometry(0.2, 0.014, 0.08),
-    bar: new THREE.CylinderGeometry(0.006, 0.006, 0.2, 6),
-    cap: new THREE.SphereGeometry(0.114, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2),
-    brim: new THREE.BoxGeometry(0.17, 0.012, 0.11),
-    hatCrown: new THREE.CylinderGeometry(0.1, 0.112, 0.11, 16),
-    hatBrim: new THREE.CylinderGeometry(0.2, 0.2, 0.012, 24),
-    blade: new THREE.BoxGeometry(0.108, 0.56, 0.042),
-    ridge: new THREE.BoxGeometry(0.035, 0.42, 0.03),
-    grip: new THREE.CylinderGeometry(0.018, 0.018, 0.3, 8),
+    pelvis: new THREE.CapsuleGeometry(0.16, 0.14, 6, 14),
+    torso: new THREE.CapsuleGeometry(0.21, 0.24, 8, 18),
+    sash: new THREE.CylinderGeometry(0.218, 0.218, 0.07, 24, 1, true),
+    collar: new THREE.TorusGeometry(0.12, 0.035, 8, 20),
+    head: new THREE.SphereGeometry(0.27, 28, 22),
+    eye: new THREE.SphereGeometry(0.055, 14, 10),
+    pupil: new THREE.SphereGeometry(0.03, 10, 8),
+    shine: new THREE.SphereGeometry(0.01, 6, 4),
+    brow: new THREE.BoxGeometry(0.085, 0.022, 0.02),
+    mouth: new THREE.BoxGeometry(0.075, 0.016, 0.012),
+    nose: new THREE.SphereGeometry(0.032, 10, 8),
+    ear: new THREE.SphereGeometry(0.05, 10, 8),
+    upper: new THREE.CapsuleGeometry(0.075, 0.12, 4, 12),
+    fore: new THREE.CapsuleGeometry(0.068, 0.1, 4, 12),
+    hand: new THREE.SphereGeometry(0.085, 12, 10),
+    glove: new THREE.BoxGeometry(0.16, 0.15, 0.16),
+    thigh: new THREE.CapsuleGeometry(0.1, 0.1, 4, 12),
+    shin: new THREE.CapsuleGeometry(0.088, 0.1, 4, 12),
+    pad: new THREE.CapsuleGeometry(0.108, 0.17, 4, 12),
+    shoe: new THREE.BoxGeometry(0.17, 0.1, 0.3),
+    helmet: new THREE.SphereGeometry(0.3, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.47),
+    peak: new THREE.BoxGeometry(0.36, 0.025, 0.13),
+    bar: new THREE.CylinderGeometry(0.011, 0.011, 0.34, 6),
+    vbar: new THREE.CylinderGeometry(0.011, 0.011, 0.15, 6),
+    cap: new THREE.SphereGeometry(0.287, 26, 14, 0, Math.PI * 2, 0, Math.PI * 0.42),
+    brim: new THREE.BoxGeometry(0.3, 0.025, 0.2),
+    hatCrown: new THREE.CylinderGeometry(0.22, 0.25, 0.2, 20),
+    hatBrim: new THREE.CylinderGeometry(0.42, 0.42, 0.02, 28),
+    blade: new THREE.BoxGeometry(0.13, 0.5, 0.055),
+    ridge: new THREE.BoxGeometry(0.045, 0.38, 0.035),
+    grip: new THREE.CylinderGeometry(0.026, 0.026, 0.24, 8),
   };
-  const SKIN = [0xc68e5e, 0x8d5524, 0xe0ac69, 0xf1c27d, 0xa86b3c, 0x6b4226];
-  const legH = (h, k) => 0.45 * Math.cos(h) + 0.44 * Math.cos(h + k) + 0.06;
+  const SKIN = [0xf1c27d, 0xe0ac69, 0xc68e5e, 0xa86b3c, 0x8d5524];
+  const FACE = { white: T(0xffffff), black: new THREE.MeshBasicMaterial({ color: 0x111111 }), brow: T(0x3b2a1a), mouth: T(0x7a2e2e),
+    shine: new THREE.MeshBasicMaterial({ color: 0xffffff }), metal: T(0x9aa4b2) };
+
+  function addPart(parent, geo, m, x, y, z, sx = 1, sy = 1, sz = 1, outline = true) {
+    const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.scale.set(sx, sy, sz); me.castShadow = true; parent.add(me);
+    if (outline) { const o = new THREE.Mesh(geo, OUTLINE); o.scale.setScalar(1.07); me.add(o); }
+    return me;
+  }
+  const group = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 
   function makeBat() {
-    const g = new THREE.Group(), willow = M(0xe9cf98);
-    const grip = new THREE.Mesh(GEO.grip, M(0x111827)); grip.position.y = -0.15;
-    const blade = new THREE.Mesh(GEO.blade, willow); blade.position.y = -0.58;
-    const ridge = new THREE.Mesh(GEO.ridge, willow); ridge.position.set(0, -0.6, 0.03);
-    [grip, blade, ridge].forEach((m) => { m.castShadow = true; g.add(m); });
+    const g = new THREE.Group(), willow = T(0xf0d29b);
+    addPart(g, GEO.grip, T(0x1f2937), 0, -0.12, 0);
+    addPart(g, GEO.blade, willow, 0, -0.49, 0);
+    addPart(g, GEO.ridge, willow, 0, -0.5, 0.035, 1, 1, 1, false);
     return g;
   }
 
   function makePlayer(o) {
     const u = {}, root = new THREE.Group();
-    u.shirtM = M(o.shirt); u.trouserM = M(o.trousers); u.capM = M(o.cap);
-    const skinM = new THREE.MeshPhongMaterial({ color: o.skin || pick(SKIN), shininess: 14 });
-    const white = M(0xf8fafc), shoeM = M(0xf1f5f9), metal = M(0xcbd5e1);
-    const add = (parent, geo, m, x, y, z, sx = 1, sy = 1, sz = 1) => {
-      const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.scale.set(sx, sy, sz); me.castShadow = true; parent.add(me); return me;
-    };
-    const grp = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+    u.shirtM = T(o.shirt); u.trouserM = T(o.trousers); u.capM = T(o.cap); u.accentM = T(o.accent);
+    const skinM = T(o.skin || pick(SKIN)), white = T(0xf8fafc), shoeM = T(0xf1f5f9);
 
-    u.hips = grp(root, 0, 0.95, 0);
-    add(u.hips, GEO.pelvis, u.trouserM, 0, 0.02, 0, 1, 1, 0.8).rotation.z = Math.PI / 2;
-    u.spine = grp(u.hips, 0, 0.08, 0);
-    add(u.spine, GEO.torso, u.shirtM, 0, 0.3, 0, 1.18, 1, 0.72);
-    add(u.spine, GEO.neck, skinM, 0, 0.6, 0);
-    u.headG = grp(u.spine, 0, 0.66, 0);
-    add(u.headG, GEO.head, skinM, 0, 0.08, 0, 0.94, 1.12, 1);
-    add(u.headG, GEO.nose, skinM, 0, 0.065, -0.1);
-    add(u.headG, GEO.ear, skinM, -0.1, 0.08, 0); add(u.headG, GEO.ear, skinM, 0.1, 0.08, 0);
-    if (o.head === "helmet") {
-      add(u.headG, GEO.helmet, u.capM, 0, 0.09, 0, 1, 1.05, 1.05);
-      add(u.headG, GEO.peak, u.capM, 0, 0.13, -0.135);
-      for (let i = 0; i < 3; i++) { const b = add(u.headG, GEO.bar, metal, 0, 0.06 - i * 0.045, -0.125); b.rotation.z = Math.PI / 2; }
-    } else if (o.head === "umpire") {
-      add(u.headG, GEO.hatCrown, white, 0, 0.18, 0); add(u.headG, GEO.hatBrim, white, 0, 0.135, 0);
-    } else {
-      add(u.headG, GEO.cap, u.capM, 0, 0.1, 0); add(u.headG, GEO.brim, u.capM, 0, 0.11, -0.12);
+    u.hips = group(root, 0, HIP_Y, 0);
+    addPart(u.hips, GEO.pelvis, u.trouserM, 0, 0.02, 0, 1, 1, 0.82).rotation.z = Math.PI / 2;
+    u.spine = group(u.hips, 0, 0.06, 0);
+    addPart(u.spine, GEO.torso, u.shirtM, 0, 0.3, 0, 1.1, 1, 0.85);
+    addPart(u.spine, GEO.sash, u.accentM, 0, 0.36, 0, 1.12, 1, 0.87, false);
+    addPart(u.spine, GEO.collar, u.accentM, 0, 0.58, 0, 1, 1, 1, false).rotation.x = Math.PI / 2;
+
+    u.headG = group(u.spine, 0, 0.6, 0);
+    const face = group(u.headG, 0, 0.25, 0);
+    addPart(face, GEO.head, skinM, 0, 0, 0, 1, 0.96, 1);
+    for (const s of [-1, 1]) {
+      addPart(face, GEO.ear, skinM, s * 0.265, -0.01, 0.01, 0.7, 1, 1);
+      addPart(face, GEO.eye, FACE.white, s * 0.095, 0.02, -0.25, 0.85, 1.05, 0.55, false);
+      addPart(face, GEO.pupil, FACE.black, s * 0.09, 0.012, -0.278, 1, 1.25, 0.6, false);
+      addPart(face, GEO.shine, FACE.shine, s * 0.083, 0.03, -0.296, 1, 1, 1, false);
+      addPart(face, GEO.brow, FACE.brow, s * 0.1, 0.11, -0.25, 1, 1, 1, false).rotation.z = -s * 0.15;
     }
+    addPart(face, GEO.nose, skinM, 0, -0.04, -0.265, 1, 1, 1, false);
+    addPart(face, GEO.mouth, FACE.mouth, 0, -0.12, -0.245, 1, 1, 1, false);
+    if (o.head === "helmet") {
+      addPart(face, GEO.helmet, u.capM, 0, 0, 0, 1, 1, 1.04);
+      addPart(face, GEO.peak, u.capM, 0, 0.035, -0.32).rotation.x = -0.18;
+      for (const y of [-0.07, -0.15]) addPart(face, GEO.bar, FACE.metal, 0, y, -0.3, 1, 1, 1, false).rotation.z = Math.PI / 2;
+      addPart(face, GEO.vbar, FACE.metal, 0, -0.11, -0.305, 1, 1, 1, false);
+    } else if (o.head === "umpire") {
+      addPart(face, GEO.hatCrown, white, 0, 0.27, 0); addPart(face, GEO.hatBrim, white, 0, 0.17, 0);
+    } else {
+      addPart(face, GEO.cap, u.capM, 0, 0.02, 0, 1, 1, 1.03);
+      addPart(face, GEO.brim, u.capM, 0, 0.1, -0.3).rotation.x = -0.12;
+    }
+
     for (const side of [-1, 1]) {
       const s = side < 0 ? "L" : "R";
-      const sh = grp(u.spine, side * 0.215, 0.5, 0); add(sh, GEO.upper, u.shirtM, 0, -0.155, 0);
-      const el = grp(sh, 0, -0.31, 0); add(el, GEO.fore, o.sleeves ? u.shirtM : skinM, 0, -0.142, 0);
-      add(el, o.gloves ? GEO.glove : GEO.hand, o.gloves ? white : skinM, 0, -0.3, 0);
-      const hp = grp(u.hips, side * 0.095, 0, 0); add(hp, GEO.thigh, u.trouserM, 0, -0.225, 0);
-      const kn = grp(hp, 0, -0.45, 0); add(kn, GEO.shin, u.trouserM, 0, -0.22, 0);
-      if (o.pads) add(kn, GEO.pad, white, 0, -0.2, -0.055);
-      add(kn, GEO.shoe, shoeM, 0, -0.47, -0.05);
+      const sh = group(u.spine, side * 0.27, 0.47, 0); addPart(sh, GEO.upper, u.shirtM, 0, -0.13, 0);
+      const el = group(sh, 0, -0.25, 0); addPart(el, GEO.fore, o.sleeves ? u.shirtM : skinM, 0, -0.11, 0);
+      if (o.gloves) addPart(el, GEO.glove, white, 0, -0.26, 0); else addPart(el, GEO.hand, skinM, 0, -0.25, 0);
+      const hp = group(u.hips, side * 0.11, 0, 0); addPart(hp, GEO.thigh, u.trouserM, 0, -0.14, 0);
+      const kn = group(hp, 0, -LEG.thigh, 0); addPart(kn, GEO.shin, u.trouserM, 0, -0.13, 0);
+      if (o.pads) addPart(kn, GEO.pad, white, 0, -0.12, -0.04, 1, 1, 0.75);
+      addPart(kn, GEO.shoe, shoeM, 0, -0.285, -0.05);
       u["sh" + s] = sh; u["el" + s] = el; u["hip" + s] = hp; u["kn" + s] = kn;
     }
     root.userData = u; scene.add(root); stand(root); return root;
@@ -469,45 +499,45 @@
   function stand(p) {
     const u = p.userData;
     [u.hipL, u.hipR, u.knL, u.knR, u.shL, u.shR, u.elL, u.elR, u.spine, u.headG].forEach((g) => g.rotation.set(0, 0, 0));
-    u.shL.rotation.z = -0.08; u.shR.rotation.z = 0.08; u.elL.rotation.x = u.elR.rotation.x = 0.12; u.hips.position.y = 0.95;
+    u.shL.rotation.z = -0.14; u.shR.rotation.z = 0.14; u.elL.rotation.x = u.elR.rotation.x = 0.15; u.hips.position.y = HIP_Y;
   }
   function animRun(p, ph, amt) {
     const u = p.userData, s = Math.sin(ph);
-    u.hipL.rotation.x = s * 0.75 * amt; u.hipR.rotation.x = -s * 0.75 * amt;
-    u.knL.rotation.x = -(Math.max(0, -s) * 1.3 + 0.15) * amt; u.knR.rotation.x = -(Math.max(0, s) * 1.3 + 0.15) * amt;
-    u.shL.rotation.x = -s * 0.7 * amt; u.shR.rotation.x = s * 0.7 * amt;
-    u.shL.rotation.z = -0.1; u.shR.rotation.z = 0.1; u.elL.rotation.x = u.elR.rotation.x = 1.15 * amt + 0.12;
-    u.spine.rotation.x = -0.15 * amt;
-    u.hips.position.y = 0.95 - 0.04 * amt + Math.abs(Math.cos(ph)) * 0.05 * amt;
+    u.hipL.rotation.set(s * 0.8 * amt, 0, 0); u.hipR.rotation.set(-s * 0.8 * amt, 0, 0);
+    u.knL.rotation.set(-(Math.max(0, -s) * 1.3 + 0.15) * amt, 0, 0); u.knR.rotation.set(-(Math.max(0, s) * 1.3 + 0.15) * amt, 0, 0);
+    u.shL.rotation.set(-s * 0.8 * amt, 0, -0.18); u.shR.rotation.set(s * 0.8 * amt, 0, 0.18);
+    u.elL.rotation.x = u.elR.rotation.x = 1.1 * amt + 0.15;
+    u.spine.rotation.set(-0.15 * amt, 0, 0);
+    u.hips.position.y = HIP_Y - 0.03 * amt + Math.abs(Math.cos(ph)) * 0.05 * amt;
   }
   function animReady(p, a) { // fielder's crouched "ready" stance, a = 0..1
-    const u = p.userData, h = 0.5 * a, k = -0.85 * a;
-    u.hipL.rotation.set(h, 0, -0.14 * a); u.hipR.rotation.set(h, 0, 0.14 * a);
+    const u = p.userData, h = 0.5 * a, k = -0.9 * a;
+    u.hipL.rotation.set(h, 0, -0.16 * a); u.hipR.rotation.set(h, 0, 0.16 * a);
     u.knL.rotation.set(k, 0, 0); u.knR.rotation.set(k, 0, 0);
-    u.spine.rotation.set(-0.42 * a, 0, 0); u.headG.rotation.set(0.3 * a, 0, 0);
-    u.shL.rotation.set(0.75 * a, 0, -0.08 + 0.12 * a); u.shR.rotation.set(0.75 * a, 0, 0.08 - 0.12 * a);
-    u.elL.rotation.x = u.elR.rotation.x = 0.12 + 0.5 * a;
+    u.spine.rotation.set(-0.35 * a, 0, 0); u.headG.rotation.set(0.25 * a, 0, 0);
+    u.shL.rotation.set(0.8 * a, 0, -0.14 + 0.16 * a); u.shR.rotation.set(0.8 * a, 0, 0.14 - 0.16 * a);
+    u.elL.rotation.x = u.elR.rotation.x = 0.15 + 0.5 * a;
     u.hips.position.y = legH(h, k);
   }
   function keeperPose(p, a) {
     const u = p.userData, h = 1.25 * a, k = -2.0 * a;
     u.hipL.rotation.set(h, 0, -0.3 * a); u.hipR.rotation.set(h, 0, 0.3 * a);
     u.knL.rotation.set(k, 0, 0); u.knR.rotation.set(k, 0, 0);
-    u.spine.rotation.set(-0.5 * a + 0.05, 0, 0); u.headG.rotation.set(0.35 * a, 0, 0);
-    u.shL.rotation.set(1.1 * a, 0, 0.25 * a); u.shR.rotation.set(1.1 * a, 0, -0.25 * a);
-    u.elL.rotation.x = u.elR.rotation.x = 0.3 * a + 0.12;
-    u.hips.position.y = legH(h, k) + 0.02;
+    u.spine.rotation.set(-0.4 * a + 0.05, 0, 0); u.headG.rotation.set(0.3 * a, 0, 0);
+    u.shL.rotation.set(1.1 * a, 0, 0.3 * a); u.shR.rotation.set(1.1 * a, 0, -0.3 * a);
+    u.elL.rotation.x = u.elR.rotation.x = 0.3 * a + 0.15;
+    u.hips.position.y = legH(h, k) + 0.03;
   }
   function face(p, x, z) { p.rotation.y = Math.atan2(-(x - p.position.x), -(z - p.position.z)); }
 
-  const kit = (c, extra) => Object.assign({ shirt: c, trousers: darken(c, 0.62), cap: c }, extra || {});
+  const kit = (c, extra) => Object.assign({ shirt: c, trousers: darken(c, 0.62), cap: c, accent: 0xffffff }, extra || {});
   const batsman = makePlayer(kit(0x004ba0, { head: "helmet", pads: true, gloves: true, sleeves: true }));
-  const batPivot = new THREE.Group(); batPivot.position.set(0.02, 1.0, -0.36); batsman.add(batPivot); batPivot.add(makeBat());
+  const batPivot = group(batsman, 0.02, 0.78, -0.42); batPivot.add(makeBat());
   const nonStriker = makePlayer(kit(0x004ba0, { head: "helmet", pads: true, gloves: true, sleeves: true }));
-  const nsBat = makeBat(); nsBat.position.y = -0.3; nsBat.rotation.x = 0.15; nonStriker.userData.elR.add(nsBat);
+  const nsBat = makeBat(); nsBat.position.y = -0.24; nsBat.rotation.x = 0.15; nonStriker.userData.elR.add(nsBat);
   const bowler = makePlayer(kit(0xf9cd05));
-  const umpire = makePlayer({ shirt: 0x374151, trousers: 0x1f2937, cap: 0xffffff, head: "umpire", sleeves: true });
-  umpire.position.set(1.1, 0, -22.4); umpire.rotation.y = Math.PI;
+  const umpire = makePlayer({ shirt: 0x374151, trousers: 0x1f2937, cap: 0xffffff, accent: 0x111827, head: "umpire", sleeves: true });
+  umpire.position.set(1.2, 0, -22.4); umpire.rotation.y = Math.PI;
   const keeper = makePlayer(kit(0xf9cd05, { head: "helmet", pads: true, gloves: true, sleeves: true }));
   keeper.userData.home = V(0.15, 0, 2.6);
   const FIELD = [[6.5, Math.PI - 0.35], [22, 1.75], [27, 1.05], [26, 0.32], [26, -0.32], [28, -1.05], [22, -1.75], [52, -2.55], [56, -0.75]];
@@ -547,7 +577,7 @@
   // ================================================================ state
   const S = {
     phase: "menu", mode: null, cfg: { overs: 2, wkts: 3, diff: "medium" },
-    setup: { mode: "cpu", t1: "MI", t2: "CSK", overs: 2, wkts: 3, diff: "medium" },
+    setup: { team: "MI", overs: 2, wkts: 3, diff: "medium" },
     teams: [], innings: [], cur: 0, inn: null, target: null, token: 0,
     aim: { x: 0.1, L: 5.5, type: "fast" }, del: null, swung: false, swingStart: null, pendingHit: null,
     crossed: false, bounced: false, frozen: false, cpuSwing: null, cpuBowlAt: 0, thisOver: [], overDone: false,
@@ -580,7 +610,7 @@
     $("msg").classList.remove("hidden");
   }
   function hideMsg() { $("msg").classList.add("hidden"); }
-  function formMsg(id, text, ok) { const el = $(id); el.textContent = text || ""; el.classList.toggle("ok", !!ok); }
+  function formMsg(id, text, ok) { const el = $(id); el.innerHTML = text || ""; el.classList.toggle("ok", !!ok); }
 
   function renderPicker(el, sel, onPick, taken) {
     el.innerHTML = TEAM_KEYS.map((k) => `<button class="team${k === sel ? " on" : ""}${k === taken ? " taken" : ""}" data-k="${k}" ` +
@@ -640,7 +670,8 @@
   function applyColors() {
     const set = (p, key, helmet) => {
       const t = IPL[key], u = p.userData;
-      u.shirtM.color.setHex(t.c1); u.trouserM.color.setHex(darken(t.c1, 0.62)); u.capM.color.setHex(helmet ? darken(t.c1, 0.55) : t.c1);
+      u.shirtM.color.setHex(t.c1); u.trouserM.color.setHex(darken(t.c1, 0.62)); u.accentM.color.setHex(t.c2);
+      u.capM.color.setHex(helmet ? darken(t.c1, 0.6) : t.c1);
     };
     const bk = S.teams[S.inn.bat].key, fk = S.teams[S.inn.bowl].key;
     set(batsman, bk, true); set(nonStriker, bk, true);
@@ -651,13 +682,9 @@
     S.phase = "paused"; screen(null); hideMsg(); $("hud").classList.add("hidden");
   }
   function startOffline() {
-    const s = S.setup;
-    S.mode = s.mode; S.cfg = { overs: s.overs, wkts: s.wkts, diff: s.diff };
-    const t2 = s.mode === "cpu" ? pick(TEAM_KEYS.filter((k) => k !== s.t1)) : s.t2;
-    S.teams = [
-      { key: s.t1, name: IPL[s.t1].name, kind: "human" },
-      { key: t2, name: IPL[t2].name, kind: s.mode === "cpu" ? "cpu" : "human" },
-    ];
+    const s = S.setup, cpuTeam = pick(TEAM_KEYS.filter((k) => k !== s.team));
+    S.mode = "cpu"; S.cfg = { overs: s.overs, wkts: s.wkts, diff: s.diff };
+    S.teams = [{ key: s.team, name: IPL[s.team].name, kind: "human" }, { key: cpuTeam, name: IPL[cpuTeam].name, kind: "cpu" }];
     resetMatchState();
     const w = Math.random() < 0.5 ? 0 : 1, tw = S.teams[w];
     const begin = (batFirst) => { S.innings = [newInnings(batFirst, 1 - batFirst), null]; startInnings(); };
@@ -710,7 +737,7 @@
       if (S.net) S.net.inMatch = false;
       const host = S.net && S.net.isHost;
       showMsg(title, card + (host ? "" : `<p class="muted small center">The host can start a rematch.</p>`),
-        host ? [{ label: "🔁 Rematch", fn: () => { if (S.net && S.net.peer) hostStart(); else { showMsg("Opponent left", "", [{ label: "Back to lobby", fn: leaveRoom }]); } } },
+        host ? [{ label: "🔁 Rematch", fn: () => { if (S.net && S.net.peer) hostStart(); else showMsg("Opponent left", "", [{ label: "Back to lobby", fn: leaveRoom }]); } },
           { label: "Leave room", fn: leaveRoom }]
           : [{ label: "Leave room", fn: leaveRoom }]);
     } else {
@@ -726,7 +753,7 @@
     S.del = null; S.swung = false; S.swingStart = null; S.pendingHit = null; S.crossed = false; S.bounced = false; S.frozen = false;
     S.cpuSwing = null; S.hit = null; S.result = null; S.stumpFx = null; S.chaser = null; S.runners = null; S.celebrate = null; S.netResult = null;
     ball.visible = false; pitchMarker.visible = false; aimMarker.visible = false;
-    batsman.position.set(0.45, 0, BAT_Z); batsman.rotation.y = Math.PI / 2;
+    batsman.position.set(0.5, 0, BAT_Z); batsman.rotation.y = Math.PI / 2;
     nonStriker.position.set(-0.9, 0, -19.4); nonStriker.rotation.y = Math.PI; stand(nonStriker);
     bowler.position.set(-0.35, 0, -26.5); bowler.rotation.y = Math.PI; stand(bowler);
     keeper.position.copy(keeper.userData.home); keeper.rotation.y = 0;
@@ -750,7 +777,7 @@
       turn: fast ? rand(-0.025, 0.025) : (Math.random() < 0.5 ? -1 : 1) * rand(0.05, 0.1) };
   }
   function makeDelivery(s) {
-    const fast = s.type === "fast", R = V(-0.5, 2.15, -19.4), B = V(s.aimX, 0.04, -s.L);
+    const fast = s.type === "fast", R = V(-0.5, 1.75, -19.4), B = V(s.aimX, 0.04, -s.L);
     const t1 = Math.hypot(B.x - R.x, B.z - R.z) / s.speed, v0y = (B.y - R.y + 0.5 * G * t1 * t1) / t1;
     const vz2 = s.speed * 0.86, vx2 = s.turn * vz2, tH = (ZH - B.z) / vz2;
     const hT = clamp(0.22 + (s.L - 1.6) * 0.13, 0.2, 1.5), vy2 = Math.min(5.5, (hT - 0.04 + 0.5 * G * tH * tH) / tH);
@@ -962,12 +989,12 @@
         const u = (NOW - S.runupStart) / RUNUP, U = bowler.userData;
         bowler.position.set(-0.35, 0, lerp(-26.5, -20.6, Math.min(u, 1)));
         if (u < 0.72) animRun(bowler, NOW * 13, 1);
-        else { // delivery stride: front leg braced, bowling arm windmills over
+        else { // delivery stride: front leg braced, bowling arm windmills over the top
           const k = Math.min(1, (u - 0.72) / 0.28);
           U.hipL.rotation.set(0.55, 0, 0); U.knL.rotation.set(-0.1, 0, 0); U.hipR.rotation.set(-0.45, 0, 0); U.knR.rotation.set(-0.7, 0, 0);
           U.shR.rotation.set(-k * Math.PI * 1.75, 0, 0.05); U.elR.rotation.x = 0;
           U.shL.rotation.set(-Math.PI * 0.85 * Math.sin(Math.min(1, k * 1.3) * Math.PI), 0, -0.1); U.elL.rotation.x = 0.3;
-          U.spine.rotation.x = lerp(0.25, -0.45, k); U.hips.position.y = 0.9;
+          U.spine.rotation.x = lerp(0.25, -0.45, k); U.hips.position.y = HIP_Y - 0.04;
         }
         if (u >= 1) release();
         break;
@@ -1029,13 +1056,13 @@
       const t = NOW - S.releaseAt, U = bowler.userData;
       if (S.celebrate) {
         const c = NOW - S.celebrate.t0; stand(bowler);
-        U.shL.rotation.set(-2.8, 0, -0.35); U.shR.rotation.set(-2.8, 0, 0.35); U.hips.position.y = 0.95 + Math.abs(Math.sin(c * 7)) * 0.12;
+        U.shL.rotation.set(-2.8, 0, -0.35); U.shR.rotation.set(-2.8, 0, 0.35); U.hips.position.y = HIP_Y + Math.abs(Math.sin(c * 7)) * 0.12;
       } else if (t < 0.8) {
         bowler.position.z = -20.6 + easeOut(t / 0.8) * 2.4; animRun(bowler, NOW * 13, (1 - t / 0.8) * 0.8);
         U.spine.rotation.x = -0.4 * (1 - t / 0.8);
       } else stand(bowler);
     }
-    // fielders: crouch as the bowler runs in; the nearest one chases the ball
+    // fielders crouch as the bowler runs in; the nearest one chases the ball
     const set = S.phase === "runup" || S.phase === "delivery";
     fielders.forEach((f) => {
       if (S.chaser && S.chaser.f === f) return;
@@ -1076,12 +1103,12 @@
     batsman.rotation.y = Math.PI / 2;
     batPivot.rotation.set(0, 0, batAngle);
     // side-on stance: feet apart down the pitch, knees flexed, head turned to the bowler
-    U.hipL.rotation.set(0.2, 0, -0.17); U.hipR.rotation.set(0.2, 0, 0.17);
-    U.knL.rotation.set(-0.35, 0, 0); U.knR.rotation.set(-0.35, 0, 0);
-    U.hips.position.y = legH(0.2, -0.35) - 0.02;
-    U.spine.rotation.set(-0.26, clamp(batAngle, -1.7, 2.5) * 0.12, 0);
-    U.headG.rotation.set(0.1, -1.3 - clamp(batAngle, -1.7, 2.5) * 0.1, 0);
-    U.shL.rotation.set(0.8, 0, 0.3 + batAngle * 0.4); U.shR.rotation.set(0.8, 0, -0.02 + batAngle * 0.4);
+    U.hipL.rotation.set(0.2, 0, -0.2); U.hipR.rotation.set(0.2, 0, 0.2);
+    U.knL.rotation.set(-0.4, 0, 0); U.knR.rotation.set(-0.4, 0, 0);
+    U.hips.position.y = legH(0.2, -0.4) - 0.02;
+    U.spine.rotation.set(-0.22, clamp(batAngle, -1.7, 2.5) * 0.12, 0);
+    U.headG.rotation.set(0.05, -1.25 - clamp(batAngle, -1.7, 2.5) * 0.08, 0);
+    U.shL.rotation.set(0.85, 0, 0.35 + batAngle * 0.4); U.shR.rotation.set(0.85, 0, -0.05 + batAngle * 0.4);
     U.elL.rotation.x = U.elR.rotation.x = 0.35;
   }
 
@@ -1101,76 +1128,80 @@
     camera.lookAt(camLook);
   }
 
-  // ================================================================ online (Supabase accounts + realtime rooms)
-  function send(p) { if (S.net && S.net.ch) S.net.ch.send({ type: "broadcast", event: "msg", payload: p }); }
-  const meMeta = () => ({ id: S.me.id, name: S.me.username, team: S.me.team, host: !!(S.net && S.net.isHost), joinedAt: S.net ? S.net.joinedAt : 0 });
-
-  async function loadProfile(user) {
-    let { data, error } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
-    if (error) throw error;
-    if (!data) {
-      let username = ((user.user_metadata && user.user_metadata.username) || user.email.split("@")[0]).replace(/[^A-Za-z0-9_]/g, "").slice(0, 16);
-      if (username.length < 3) username = "player" + Math.floor(Math.random() * 9000 + 1000);
-      let ins = await sb.from("profiles").insert({ id: user.id, username, team: "MI" }).select().single();
-      if (ins.error && ins.error.code === "23505") {
-        ins = await sb.from("profiles").insert({ id: user.id, username: username.slice(0, 12) + Math.floor(Math.random() * 9000 + 1000), team: "MI" }).select().single();
-      }
-      if (ins.error) throw ins.error;
-      data = ins.data;
-    }
-    S.me = { id: user.id, username: data.username, team: IPL[data.team] ? data.team : "MI", wins: data.wins || 0, losses: data.losses || 0 };
+  // ================================================================ online (talks to game_server.py)
+  const API = { base: "", token: store.get("cl3d_token") };
+  function defaultServer() {
+    if (/^https?:$/.test(location.protocol)) return location.origin;           // the game server is hosting this page
+    if (SERVER_DEFAULT && !SERVER_DEFAULT.startsWith("__")) return SERVER_DEFAULT; // address passed in by the Streamlit app
+    return store.get("cl3d_server") || "";
   }
-  function saveTeam() { if (sb && S.me) sb.from("profiles").update({ team: S.me.team }).eq("id", S.me.id).then(() => {}); }
-  function recordResult(winner) {
-    if (!sb || !S.me || winner === null) return;
-    const meIdx = S.teams.findIndex((t) => t.kind === "human");
-    if (winner === meIdx) S.me.wins++; else S.me.losses++;
-    sb.from("profiles").update({ wins: S.me.wins, losses: S.me.losses }).eq("id", S.me.id).then(() => {});
+  function normalizeServer(s) {
+    s = (s || "").trim().replace(/\/+$/, "");
+    if (s && !/^https?:\/\//i.test(s)) s = "http://" + s;
+    return s;
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function api(path, body, timeoutMs) {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), timeoutMs || 10000);
+    let res;
+    try {
+      res = await fetch(API.base + path, {
+        method: body ? "POST" : "GET", signal: ctrl.signal,
+        headers: Object.assign({ "Content-Type": "application/json" }, API.token ? { Authorization: "Bearer " + API.token } : {}),
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      const err = new Error(unreachableText()); err.network = true; throw err;
+    } finally { clearTimeout(timer); }
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* empty body */ }
+    if (!res.ok) { const err = new Error(data.error || `Server error (${res.status})`); err.status = res.status; throw err; }
+    return data;
+  }
+  function unreachableText() {
+    let t = `Can't reach the game server at <b>${esc(API.base || "(no address)")}</b>. Check that it's running and that you're on the same network.`;
+    if (window.isSecureContext && /^http:/.test(API.base) && !/localhost|127\.0\.0\.1/.test(API.base)) {
+      t += ` Your browser blocks it from this secure (https) page, so open <b>${esc(API.base)}</b> directly in a new tab and play from there.`;
+    }
+    return t;
   }
 
   async function goOnline() {
-    if (!sb) {
-      showMsg("Online play isn't set up yet",
-        "<p>Online matches need a free Supabase project. Follow the <b>Online play</b> steps in the Cricket Live Hub README, " +
-        "add the keys to the app's secrets, and this button will work.</p>", [{ label: "OK", fn: () => {} }]);
-      return;
+    screen("scrAuth");
+    $("auServer").value = defaultServer();
+    formMsg("auMsg", "");
+    API.base = normalizeServer($("auServer").value);
+    if (API.token && API.base) {
+      formMsg("auMsg", "Signing you in…", true);
+      try { const r = await api("/api/me"); S.me = r.profile; formMsg("auMsg", ""); openLobby(); }
+      catch (e) { if (e.status === 401) { API.token = null; store.set("cl3d_token", null); formMsg("auMsg", ""); } else formMsg("auMsg", e.message); }
     }
-    screen("scrAuth"); formMsg("auMsg", "Checking your account…", true);
-    try {
-      const { data } = await sb.auth.getSession();
-      if (data.session) { await loadProfile(data.session.user); openLobby(); return; }
-      formMsg("auMsg", "");
-    } catch (e) { formMsg("auMsg", e.message || String(e)); }
   }
   let authTab = "in";
   function setAuthTab(t) {
     authTab = t;
     document.querySelectorAll("#authTabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
-    $("auUser").classList.toggle("hidden", t !== "up");
     $("auGo").textContent = t === "up" ? "Create account" : "Sign in";
+    $("auUser").placeholder = t === "up" ? "Pick a username (3–16 letters, numbers or _)" : "Username";
+    $("auPass").placeholder = t === "up" ? "Pick a password (6+ characters)" : "Password";
     $("auPass").autocomplete = t === "up" ? "new-password" : "current-password";
     formMsg("auMsg", "");
   }
   async function submitAuth() {
-    const email = $("auEmail").value.trim(), pass = $("auPass").value, user = $("auUser").value.trim();
-    if (!email || !pass) return formMsg("auMsg", "Enter your email and password.");
+    const username = $("auUser").value.trim(), password = $("auPass").value;
+    API.base = normalizeServer($("auServer").value);
+    if (!API.base) return formMsg("auMsg", "Enter the game server address first (ask whoever is running it).");
+    if (!username || !password) return formMsg("auMsg", "Enter a username and password.");
+    if (authTab === "up" && !/^[A-Za-z0-9_]{3,16}$/.test(username)) return formMsg("auMsg", "Usernames are 3–16 letters, numbers or _.");
+    if (authTab === "up" && password.length < 6) return formMsg("auMsg", "Passwords need at least 6 characters.");
     $("auGo").disabled = true;
     try {
-      if (authTab === "up") {
-        if (!/^[A-Za-z0-9_]{3,16}$/.test(user)) return formMsg("auMsg", "Usernames are 3–16 letters, numbers or _.");
-        if (pass.length < 6) return formMsg("auMsg", "Passwords need at least 6 characters.");
-        const taken = await sb.from("profiles").select("id").eq("username", user).maybeSingle();
-        if (taken.data) return formMsg("auMsg", "That username is taken. Try another one.");
-        const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { username: user } } });
-        if (error) return formMsg("auMsg", error.message);
-        if (!data.session) { setAuthTab("in"); return formMsg("auMsg", "Account created! Check your email to confirm it, then sign in.", true); }
-        await loadProfile(data.user); openLobby();
-      } else {
-        const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-        if (error) return formMsg("auMsg", error.message);
-        await loadProfile(data.user); openLobby();
-      }
-    } catch (e) { formMsg("auMsg", e.message || String(e)); }
+      API.token = null;
+      const r = await api(authTab === "up" ? "/api/signup" : "/api/login", { username, password });
+      API.token = r.token; S.me = r.profile;
+      store.set("cl3d_token", r.token); store.set("cl3d_server", API.base);
+      $("auPass").value = ""; openLobby();
+    } catch (e) { formMsg("auMsg", e.message); }
     finally { $("auGo").disabled = false; }
   }
   function openLobby() {
@@ -1178,75 +1209,108 @@
     $("lbBadge").innerHTML = badgeHTML(me.team);
     $("lbName").textContent = me.username;
     $("lbRecord").textContent = `${me.wins} win${me.wins === 1 ? "" : "s"} · ${me.losses} loss${me.losses === 1 ? "" : "es"}`;
-    renderPicker($("pickOnline"), me.team, (k) => { me.team = k; saveTeam(); openLobby(); });
+    renderPicker($("pickOnline"), me.team, (k) => { me.team = k; api("/api/team", { team: k }).catch(() => {}); openLobby(); });
     renderChips($("oversChipsOnline"), [1, 2, 3, 5, 10], S.setup.overs, (v) => { S.setup.overs = v; openLobby(); }, null, true);
     renderChips($("wktChipsOnline"), [1, 2, 3, 5, 10], S.setup.wkts, (v) => { S.setup.wkts = v; openLobby(); });
     renderHome(); screen("scrLobby");
   }
-
-  const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  function joinRoom(code, isHost) {
-    code = (code || "").toUpperCase().trim();
+  async function createRoom() {
+    formMsg("lbMsg", ""); $("createRoom").disabled = true;
+    try { enterRoom(await api("/api/room/create", { overs: S.setup.overs, wkts: S.setup.wkts }), true); }
+    catch (e) { formMsg("lbMsg", e.message); }
+    finally { $("createRoom").disabled = false; }
+  }
+  async function joinRoom() {
+    const code = $("joinCode").value.toUpperCase().trim();
     if (!/^[A-Z0-9]{5}$/.test(code)) return formMsg("lbMsg", "Enter the 5-character room code.");
     formMsg("lbMsg", "");
-    const ch = sb.channel("cricket-" + code, { config: { presence: { key: S.me.id }, broadcast: { self: false } } });
-    const net = { ch, code, isHost, peer: null, inMatch: false, joinedAt: Date.now() };
-    S.net = net;
-    ch.on("presence", { event: "sync" }, () => { if (S.net === net) onPresence(); })
-      .on("broadcast", { event: "msg" }, ({ payload }) => { if (S.net === net) onNet(payload); })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") await ch.track(meMeta());
-        else if ((status === "CHANNEL_ERROR" || status === "TIMED_OUT") && S.net === net && !net.inMatch) roomError("Couldn't connect to the game server. Try again.");
-      });
-    $("roomCode").textContent = code; formMsg("roomMsg", "");
-    renderRoom(); screen("scrRoom");
-    if (!isHost) setTimeout(() => { if (S.net === net && !net.peer && !net.inMatch) roomError("No room found with that code."); }, 7000);
+    try { enterRoom(await api("/api/room/join", { code }), false); } catch (e) { formMsg("lbMsg", e.message); }
   }
-  function onPresence() {
-    const net = S.net, st = net.ch.presenceState(), all = [];
-    for (const k in st) for (const m of st[k]) if (!all.some((x) => x.id === m.id)) all.push(m);
-    const others = all.filter((m) => m.id !== S.me.id);
-    const hadPeer = !!net.peer;
-    if (net.isHost) net.peer = others.filter((m) => !m.host).sort((a, b) => a.joinedAt - b.joinedAt)[0] || null;
-    else {
-      if (others.some((m) => !m.host && m.joinedAt < net.joinedAt) && !net.inMatch) return roomError("That room is already full.");
-      net.peer = others.find((m) => m.host) || null;
+  function enterRoom(r, isHost) {
+    const net = { code: r.code, isHost, peer: null, room: null, inMatch: false, since: r.since, chain: Promise.resolve(), fails: 0 };
+    S.net = net;
+    $("roomCode").textContent = r.code; formMsg("roomMsg", "");
+    applyRoom(r.room); screen("scrRoom");
+    pollLoop(net);
+  }
+  async function pollLoop(net) {
+    while (S.net === net) {
+      try {
+        const r = await api(`/api/poll?code=${net.code}&since=${net.since}`, null, 30000);
+        net.fails = 0;
+        for (const ev of r.events) {
+          if (S.net !== net) return;
+          net.since = Math.max(net.since, ev.id);
+          if (ev.payload && ev.payload.t === "room") applyRoom(ev.payload); else if (ev.payload) onNet(ev.payload);
+        }
+      } catch (e) {
+        if (S.net !== net) return;
+        if (e.status === 404 || e.status === 403) return roomClosed(net.inMatch ? "Your opponent left the match." : "This room has closed.");
+        if (++net.fails >= 5) return roomClosed("Lost connection to the game server.");
+        await sleep(1000);
+      }
     }
-    if (hadPeer && !net.peer && net.inMatch) opponentLeft();
+  }
+  function send(payload) {
+    const net = S.net; if (!net) return;
+    net.chain = net.chain.then(() => api("/api/send", { code: net.code, payload })).catch(() => {});
+  }
+  function applyRoom(room) {
+    const net = S.net; if (!net) return;
+    net.room = room;
+    const hadPeer = !!net.peer;
+    net.peer = room.players.find((p) => p.id !== S.me.id) || null;
+    if (!net.isHost && !room.players.some((p) => p.host)) return roomClosed("The host closed the room.");
+    if (hadPeer && !net.peer && net.inMatch) return opponentLeft();
     renderRoom();
   }
   function renderRoom() {
-    const net = S.net; if (!net) return;
-    const mine = meMeta(), host = net.isHost ? mine : net.peer, guest = net.isHost ? net.peer : mine;
+    const net = S.net; if (!net || !net.room) return;
+    const host = net.room.players.find((p) => p.host), guest = net.room.players.find((p) => !p.host);
     const side = (m) => m ? `${badgeHTML(m.team, "lg")}<b>${esc(m.name)}</b><small>${IPL[m.team] ? IPL[m.team].name : ""}</small>`
       : `<div class="wait">Waiting for a player…</div>`;
     $("roomHost").innerHTML = side(host); $("roomGuest").innerHTML = side(guest);
-    renderPicker($("pickRoom"), S.me.team, (k) => { S.me.team = k; saveTeam(); net.ch.track(meMeta()); renderRoom(); }, net.peer ? net.peer.team : null);
-    const sameTeam = net.peer && net.peer.team === S.me.team;
+    const mine = net.room.players.find((p) => p.id === S.me.id);
+    renderPicker($("pickRoom"), mine ? mine.team : S.me.team, (k) => {
+      S.me.team = k; api("/api/room/team", { code: net.code, team: k }).catch((e) => formMsg("roomMsg", e.message));
+    }, net.peer ? net.peer.team : null);
+    const sameTeam = net.peer && mine && net.peer.team === mine.team;
     $("roomStart").classList.toggle("hidden", !net.isHost);
     $("roomStart").disabled = !net.peer || sameTeam;
-    $("roomInfo").textContent = net.isHost ? `${S.setup.overs} over${S.setup.overs === 1 ? "" : "s"} · ${S.setup.wkts} wicket${S.setup.wkts === 1 ? "" : "s"}`
-      : net.peer ? "Waiting for the host to start the match…" : "Connecting…";
-    if (sameTeam) formMsg("roomMsg", "You both picked the same team. One of you needs to pick another.");
-    else formMsg("roomMsg", "");
+    const o = net.room.overs, w = net.room.wkts;
+    $("roomInfo").textContent = `${o} over${o === 1 ? "" : "s"} · ${w} wicket${w === 1 ? "" : "s"}` +
+      (net.isHost ? "" : net.peer ? " · waiting for the host to start…" : "");
+    formMsg("roomMsg", sameTeam ? "You both picked the same team. One of you needs to pick another." : "");
   }
-  function roomError(text) { closeChannel(); openLobby(); formMsg("lbMsg", text); }
-  function closeChannel() { if (S.net) { try { sb.removeChannel(S.net.ch); } catch (e) { /* already closed */ } S.net = null; } }
+  function roomClosed(text) {
+    const wasInMatch = S.net && S.net.inMatch;
+    S.net = null;
+    if (wasInMatch || S.mode === "online") {
+      S.token++; S.phase = "paused"; $("hud").classList.add("hidden");
+      showMsg("Match ended", `<p>${esc(text)}</p>`, [{ label: "Back to lobby", fn: backToLobby }]);
+    } else { openLobby(); formMsg("lbMsg", esc(text)); }
+  }
+  function backToLobby() { S.token++; S.phase = "menu"; S.inn = null; S.mode = null; resetField(); $("hud").classList.add("hidden"); hideMsg(); openLobby(); }
   function leaveRoom() {
-    if (S.net) send({ t: "leave" });
-    closeChannel();
-    S.token++; S.phase = "menu"; S.inn = null; S.mode = null; resetField();
-    $("hud").classList.add("hidden"); hideMsg(); openLobby();
+    const net = S.net;
+    if (net) { S.net = null; api("/api/room/leave", { code: net.code }).catch(() => {}); }
+    backToLobby();
   }
   function opponentLeft() {
     if (!S.net) return;
     S.net.inMatch = false; S.token++; S.phase = "paused"; $("hud").classList.add("hidden");
     showMsg("Opponent left", "<p>Your opponent disconnected from the match.</p>", [{ label: "Back to lobby", fn: leaveRoom }]);
   }
+  function recordResult(winner) {
+    if (!S.me || winner === null) return;
+    const meIdx = S.teams.findIndex((t) => t.kind === "human");
+    api("/api/result", { won: winner === meIdx }).then((r) => { S.me = r.profile; }).catch(() => {});
+  }
   function hostStart() {
     const net = S.net; if (!net || !net.isHost || !net.peer) return;
-    const d = { t: "start", cfg: { overs: S.setup.overs, wkts: S.setup.wkts },
-      teams: [{ id: S.me.id, name: S.me.username, key: S.me.team }, { id: net.peer.id, name: net.peer.name, key: net.peer.team }],
+    const mine = net.room.players.find((p) => p.id === S.me.id);
+    const d = { t: "start", cfg: { overs: net.room.overs, wkts: net.room.wkts },
+      teams: [{ id: S.me.id, name: S.me.username, key: mine ? mine.team : S.me.team }, { id: net.peer.id, name: net.peer.name, key: net.peer.team }],
       toss: Math.random() < 0.5 ? 0 : 1, bat: Math.random() < 0.5 };
     send(d); startOnline(d);
   }
@@ -1266,48 +1330,44 @@
         if (S.phase === "aim" && bowlKind() === "remote") startDelivery(p.s); else S.pendingBowl = p.s;
         break;
       case "ball": S.netResult = p.r; break;
-      case "leave": if (S.net.inMatch || S.mode === "online") opponentLeft(); else { S.net.peer = null; renderRoom(); } break;
+      case "leave": if (S.net.inMatch) opponentLeft(); break;
     }
   }
+  window.addEventListener("pagehide", () => {
+    if (S.net && API.token && navigator.sendBeacon) navigator.sendBeacon(API.base + "/api/room/leave", JSON.stringify({ code: S.net.code, token: API.token }));
+  });
 
   // ================================================================ menus wiring
-  function renderHome() {
-    $("homeUser").innerHTML = S.me ? `Signed in as <b>${esc(S.me.username)}</b>` : "";
-  }
-  function openSetup(mode) {
-    S.setup.mode = mode;
-    $("setupTitle").textContent = mode === "cpu" ? "Play vs CPU" : "2 Players";
-    $("pick1Label").textContent = mode === "cpu" ? "Your team" : "Player 1 team";
-    $("pick2Wrap").classList.toggle("hidden", mode !== "local");
-    $("diffWrap").classList.toggle("hidden", mode !== "cpu");
-    renderSetup(); screen("scrSetup");
-  }
+  function renderHome() { $("homeUser").innerHTML = S.me ? `Signed in as <b>${esc(S.me.username)}</b>` : ""; }
   function renderSetup() {
-    const s = S.setup, local = s.mode === "local";
-    if (local && s.t1 === s.t2) s.t2 = TEAM_KEYS.find((k) => k !== s.t1);
-    renderPicker($("pick1"), s.t1, (k) => { s.t1 = k; renderSetup(); }, local ? s.t2 : null);
-    renderPicker($("pick2"), s.t2, (k) => { s.t2 = k; renderSetup(); }, s.t1);
+    const s = S.setup;
+    renderPicker($("pick1"), s.team, (k) => { s.team = k; renderSetup(); });
     renderChips($("oversChips"), [1, 2, 3, 5, 10, 20], s.overs, (v) => { s.overs = v; renderSetup(); }, null, true);
     renderChips($("wktChips"), [1, 2, 3, 5, 10], s.wkts, (v) => { s.wkts = v; renderSetup(); });
     renderChips($("diffChips"), ["easy", "medium", "hard"], s.diff, (v) => { s.diff = v; renderSetup(); }, (v) => v[0].toUpperCase() + v.slice(1));
   }
   document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
-    ac(); const g = b.dataset.go;
-    if (g === "online") goOnline(); else openSetup(g);
+    ac();
+    if (b.dataset.go === "online") goOnline(); else { renderSetup(); screen("scrSetup"); }
   }));
   document.querySelectorAll("[data-back]").forEach((b) => b.addEventListener("click", () => { renderHome(); screen(b.dataset.back); }));
   $("setupStart").onclick = () => { ac(); startOffline(); };
   document.querySelectorAll("#authTabs button").forEach((b) => b.addEventListener("click", () => setAuthTab(b.dataset.tab)));
   $("auGo").onclick = submitAuth;
   $("auPass").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAuth(); });
-  $("signOut").onclick = async () => { try { await sb.auth.signOut(); } catch (e) { /* ignore */ } S.me = null; renderHome(); screen("scrHome"); };
-  $("createRoom").onclick = () => { let c = ""; for (let i = 0; i < 5; i++) c += pick(CODE_CHARS.split("")); joinRoom(c, true); };
-  $("joinBtn").onclick = () => joinRoom($("joinCode").value, false);
-  $("joinCode").addEventListener("keydown", (e) => { if (e.key === "Enter") joinRoom($("joinCode").value, false); });
+  $("signOut").onclick = () => {
+    api("/api/logout", {}).catch(() => {});
+    API.token = null; store.set("cl3d_token", null); S.me = null; renderHome(); screen("scrHome");
+  };
+  $("createRoom").onclick = createRoom;
+  $("joinBtn").onclick = joinRoom;
+  $("joinCode").addEventListener("keydown", (e) => { if (e.key === "Enter") joinRoom(); });
   $("roomLeave").onclick = leaveRoom;
   $("roomStart").onclick = hostStart;
-  $("copyCode").onclick = () => { try { navigator.clipboard.writeText(S.net.code); $("copyCode").textContent = "Copied!"; } catch (e) { /* clipboard blocked */ }
-    setTimeout(() => { $("copyCode").textContent = "Copy code"; }, 1500); };
+  $("copyCode").onclick = () => {
+    try { navigator.clipboard.writeText(S.net.code); $("copyCode").textContent = "Copied!"; } catch (e) { /* clipboard blocked */ }
+    setTimeout(() => { $("copyCode").textContent = "Copy code"; }, 1500);
+  };
   $("menuBtn").onclick = () => {
     const online = S.mode === "online";
     showMsg("Leave this match?", online ? "<p>Your opponent will be told you left.</p>" : "<p>This match's progress will be lost.</p>",
@@ -1340,7 +1400,6 @@
 
   // ================================================================ loop
   resetField(); renderHome();
-  if (sb) sb.auth.getSession().then(({ data }) => { if (data.session) loadProfile(data.session.user).then(renderHome).catch(() => {}); }).catch(() => {});
   let last = performance.now() / 1000;
   function loop() {
     requestAnimationFrame(loop);
