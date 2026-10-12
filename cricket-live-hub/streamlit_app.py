@@ -5,7 +5,7 @@ Tab 1: Live cricket scores (from ESPNcricinfo's free, public RSS feed), ranked s
        international matches and the IPL come before domestic/local games, plus a
        player for official, publicly available live streams (YouTube embeds).
 Tab 2: HTML file viewer - upload an .html file, preview it, or open it in a
-       fresh about:blank tab.
+       fresh about:blank tab. Includes ready-made templates (e.g. a 3D cricket game).
 
 Run with:  streamlit run streamlit_app.py
 """
@@ -15,6 +15,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -23,6 +24,17 @@ import streamlit.components.v1 as components
 
 SCORES_FEED = "https://static.cricinfo.com/rss/livescores.xml"
 REFRESH_SECONDS = 30
+
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+TEMPLATES = {
+    "3D Cricket League": {
+        "file": "cricket_league_3d.html",
+        "icon": "🏏",
+        "desc": "Arcade-style 3D cricket. Play 1 player vs the CPU or 2 players on one keyboard, "
+                "and pick your overs, wickets and difficulty.",
+        "tags": ["Game", "3D", "Multiplayer"],
+    },
+}
 
 # --------------------------------------------------------------------------- #
 # Team knowledge used for ranking + badges   name: (code, background, text)
@@ -206,6 +218,15 @@ a.card:hover .card-foot { opacity: .9; color: var(--accent); }
   border-radius: 16px; opacity: .75; }
 .note { font-size: .78rem; opacity: .55; line-height: 1.5; }
 .panel-title { font-weight: 700; font-size: 1rem; margin: 2px 0 10px; display: flex; align-items: center; gap: 8px; }
+
+/* ---------- template cards ---------- */
+.tpl { display: flex; gap: 14px; align-items: center; }
+.tpl-icon { width: 54px; height: 54px; flex: none; border-radius: 14px; display: flex; align-items: center;
+  justify-content: center; font-size: 1.7rem; background: linear-gradient(135deg, #064e3b, #10b981); }
+.tpl-name { font-weight: 800; font-size: 1.05rem; letter-spacing: -.01em; }
+.tpl-desc { font-size: .85rem; opacity: .65; margin: 2px 0 6px; }
+.tpl-tag { display: inline-block; font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 8px; margin-right: 6px; border-radius: 999px; background: rgba(16,185,129,.14); color: var(--accent); }
 
 /* ---------- widgets ---------- */
 [data-testid="stVerticalBlockBorderWrapper"] { border-radius: 16px !important; }
@@ -519,18 +540,51 @@ def page_head(eyebrow, title, subtitle, meta):
     )
 
 
+@st.cache_data(show_spinner=False)
+def load_template(file_name):
+    return (TEMPLATE_DIR / file_name).read_text(encoding="utf-8")
+
+
+def inspect_template(template_name):
+    st.session_state.viewer_src = "Template"
+    st.session_state.viewer_tpl = template_name
+
+
+def templates_gallery():
+    st.markdown('<div class="sec-head" style="margin-top:0"><span>✨</span><span class="t">Templates</span>'
+                f'<span class="c">{len(TEMPLATES)}</span><span class="ln"></span></div>', unsafe_allow_html=True)
+    for name, t in TEMPLATES.items():
+        with st.container(border=True):
+            info, play, inspect = st.columns([3.4, 1.3, 1], vertical_alignment="center", gap="medium")
+            tags = "".join(f'<span class="tpl-tag">{html.escape(tag)}</span>' for tag in t["tags"])
+            info.markdown(
+                f'<div class="tpl"><div class="tpl-icon">{t["icon"]}</div><div><div class="tpl-name">{html.escape(name)}'
+                f'</div><div class="tpl-desc">{html.escape(t["desc"])}</div><div>{tags}</div></div></div>',
+                unsafe_allow_html=True,
+            )
+            with play:
+                open_blank_button(load_template(t["file"]), "▶  Play in new tab")
+            inspect.button("View code", key=f"inspect_{name}", on_click=inspect_template, args=(name,), width="stretch")
+
+
 def html_viewer_tab():
     page_head("TOOLS", "HTML Viewer", "Preview an HTML file, inspect its source, or launch it in a clean about:blank tab.",
               "📄 .html · .htm")
+    templates_gallery()
+    st.session_state.setdefault("viewer_src", "Upload")
+    st.session_state.setdefault("viewer_tpl", next(iter(TEMPLATES)))
     left, right = st.columns([1, 2.6], gap="large")
 
     with left:
         with st.container(border=True):
             st.markdown('<div class="panel-title">Source file</div>', unsafe_allow_html=True)
-            source = st.segmented_control("Input", ["Upload", "Paste"], default="Upload",
+            source = st.segmented_control("Input", ["Upload", "Paste", "Template"], key="viewer_src",
                                           label_visibility="collapsed")
             name, content = None, ""
-            if source == "Paste":
+            if source == "Template":
+                tpl = st.selectbox("Template", list(TEMPLATES), key="viewer_tpl", label_visibility="collapsed")
+                name, content = TEMPLATES[tpl]["file"], load_template(TEMPLATES[tpl]["file"])
+            elif source == "Paste":
                 content = st.text_area("Paste HTML", height=240, placeholder="<!doctype html>\n<html>…</html>",
                                        label_visibility="collapsed")
                 name = "pasted.html" if content.strip() else None
@@ -570,7 +624,7 @@ def html_viewer_tab():
                 f'<div class="empty" style="height:{height}px;display:flex;align-items:center;'
                 'justify-content:center;flex-direction:column;gap:8px">'
                 '<div style="font-size:2.6rem">📄</div><div><b>Your preview will appear here</b></div>'
-                '<div class="note">Upload or paste an HTML file to get started.</div></div>',
+                '<div class="note">Upload or paste an HTML file, or pick a template, to get started.</div></div>',
                 unsafe_allow_html=True,
             )
 
