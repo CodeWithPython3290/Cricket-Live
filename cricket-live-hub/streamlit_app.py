@@ -143,24 +143,29 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 .block-container { padding: 0 2.2rem 2rem !important; max-width: 100% !important; }
 
 /* ---------- top navigation (the main tabs) ---------- */
-.stTabs [data-baseweb="tab-list"] {
-  position: sticky; top: 0; z-index: 1000;
-  background: var(--nav); margin: 0 -2.2rem; padding: 0 2.2rem; gap: 4px;
-  border-bottom: 1px solid rgba(255,255,255,.08); box-shadow: 0 8px 30px rgba(2,6,23,.25);
+/* The block holding this <style> tag is empty but still gets spacing after it; hide it so the nav bar sits flush at the top. */
+div[data-testid="stElementContainer"]:has(style) { display: none; }
+/* Uses role attributes so it works with both tab implementations Streamlit has shipped (BaseWeb and React Aria). */
+.stTabs [role="tablist"] {
+  position: sticky; top: 0; z-index: 1000; display: flex; align-items: stretch; gap: 4px;
+  width: auto !important; box-sizing: border-box; margin: 0 -2.2rem !important; padding: 0 2.2rem;
+  background: var(--nav); border: 0 !important; box-shadow: 0 8px 30px rgba(2,6,23,.25);
 }
-.stTabs [data-baseweb="tab-list"]::before {
+.stTabs [role="tablist"]::before {
   content: "🏏  CRICKET LIVE HUB"; color: #fff; font-weight: 800; letter-spacing: .14em;
   font-size: .85rem; display: flex; align-items: center; margin-right: auto; white-space: nowrap;
 }
-.stTabs [data-baseweb="tab"] {
-  height: 62px; padding: 0 20px; background: transparent !important;
+.stTabs [role="tab"] {
+  position: relative; height: 62px; padding: 0 20px; display: flex; align-items: center;
+  background: transparent !important; border: 0 !important;
 }
-.stTabs [data-baseweb="tab"] p { color: rgba(255,255,255,.62); font-weight: 600; font-size: .92rem; }
-.stTabs [data-baseweb="tab"]:hover p { color: #fff; }
-.stTabs [aria-selected="true"] p { color: #fff; }
-.stTabs [data-baseweb="tab-highlight"] { background: var(--accent); height: 3px; border-radius: 3px 3px 0 0; }
+.stTabs [role="tab"] p { color: rgba(255,255,255,.62) !important; font-weight: 600; font-size: .92rem; margin: 0; }
+.stTabs [role="tab"]:hover p, .stTabs [role="tab"][aria-selected="true"] p { color: #fff !important; }
+.stTabs .react-aria-SelectionIndicator, .stTabs [data-baseweb="tab-highlight"] {
+  background-color: var(--accent) !important; border-color: var(--accent) !important; height: 3px !important; border-radius: 3px 3px 0 0;
+}
 .stTabs [data-baseweb="tab-border"] { display: none; }
-.stTabs [data-baseweb="tab-panel"] { padding-top: 1.6rem; }
+.stTabs [role="tabpanel"] { padding-top: 1.6rem; }
 
 /* ---------- page header ---------- */
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap;
@@ -222,14 +227,28 @@ a.card:hover .card-foot { opacity: .9; color: var(--accent); }
 .note { font-size: .78rem; opacity: .55; line-height: 1.5; }
 .panel-title { font-weight: 700; font-size: 1rem; margin: 2px 0 10px; display: flex; align-items: center; gap: 8px; }
 
-/* ---------- template cards ---------- */
-.tpl { display: flex; gap: 14px; align-items: center; }
-.tpl-icon { width: 54px; height: 54px; flex: none; border-radius: 14px; display: flex; align-items: center;
-  justify-content: center; font-size: 1.7rem; background: linear-gradient(135deg, #064e3b, #10b981); }
-.tpl-name { font-weight: 800; font-size: 1.05rem; letter-spacing: -.01em; }
-.tpl-desc { font-size: .85rem; opacity: .65; margin: 2px 0 6px; }
-.tpl-tag { display: inline-block; font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  padding: 2px 8px; margin-right: 6px; border-radius: 999px; background: rgba(16,185,129,.14); color: var(--accent); }
+/* ---------- template banners ---------- */
+[class*="st-key-tpl_card_"] {
+  background: linear-gradient(120deg, #052e25 0%, #065f46 50%, #0f9f74 100%); border-radius: 18px;
+  padding: 20px 24px; margin-bottom: 18px; box-shadow: 0 12px 32px rgba(5,46,37,.25); color: #fff;
+}
+[class*="st-key-tpl_card_"] [data-testid="stMarkdownContainer"] p { margin: 0; }
+.tpl { display: flex; gap: 18px; align-items: center; }
+.tpl-icon { width: 64px; height: 64px; flex: none; border-radius: 18px; display: grid; place-items: center;
+  font-size: 2rem; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); }
+.tpl-body { min-width: 0; }
+.tpl-name { font-weight: 800; font-size: 1.3rem; letter-spacing: -.02em; color: #fff; line-height: 1.2; }
+.tpl-desc { font-size: .9rem; color: rgba(255,255,255,.82); margin: 4px 0 10px; }
+.tpl-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tpl-tag { font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.16); color: #fff; }
+.tpl-note { margin-top: 10px; font-size: .8rem; color: rgba(255,255,255,.75); }
+/* stacked actions: Play (component, 44px) and View code share the same size */
+[class*="st-key-tpl_card_"] [data-testid="stColumn"]:last-child [data-testid="stVerticalBlock"] { gap: 10px; }
+[class*="st-key-inspect_tpl_"] button { height: 44px; border-radius: 10px; background: rgba(255,255,255,.12);
+  color: #fff; border: 1px solid rgba(255,255,255,.35); font-weight: 700; }
+[class*="st-key-inspect_tpl_"] button:hover { background: rgba(255,255,255,.22); border-color: #fff; color: #fff; }
+[class*="st-key-tpl_card_"] iframe { display: block; }
 
 /* ---------- widgets ---------- */
 [data-testid="stVerticalBlockBorderWrapper"] { border-radius: 16px !important; }
@@ -578,25 +597,24 @@ def inspect_template(template_name):
 def templates_gallery():
     st.markdown('<div class="sec-head" style="margin-top:0"><span>✨</span><span class="t">Templates</span>'
                 f'<span class="c">{len(TEMPLATES)}</span><span class="ln"></span></div>', unsafe_allow_html=True)
-    for name, t in TEMPLATES.items():
-        with st.container(border=True):
-            info, play, inspect = st.columns([3.4, 1.3, 1], vertical_alignment="center", gap="medium")
+    for i, (name, t) in enumerate(TEMPLATES.items()):
+        with st.container(key=f"tpl_card_{i}"):
+            info, actions = st.columns([5, 1.5], vertical_alignment="center", gap="large")
             tags = "".join(f'<span class="tpl-tag">{html.escape(tag)}</span>' for tag in t["tags"])
-            server = ""
-            if t.get("online"):
-                server = ('<div class="tpl-desc" style="margin-top:6px">🌐 <b>Online:</b> create a room and share its code. '
-                          'Friends anywhere can join by opening this app. Keep this tab open while you play online.</div>')
+            note = ('<div class="tpl-note">🌐 Create a room and share its code. Friends anywhere can join by opening this app. '
+                    'Keep this tab open while you play online.</div>') if t.get("online") else ""
             info.markdown(
-                f'<div class="tpl"><div class="tpl-icon">{t["icon"]}</div><div><div class="tpl-name">{html.escape(name)}'
-                f'</div><div class="tpl-desc">{html.escape(t["desc"])}</div><div>{tags}</div>{server}</div></div>',
+                f'<div class="tpl"><div class="tpl-icon">{t["icon"]}</div><div class="tpl-body">'
+                f'<div class="tpl-name">{html.escape(name)}</div><div class="tpl-desc">{html.escape(t["desc"])}</div>'
+                f'<div class="tpl-tags">{tags}</div>{note}</div></div>',
                 unsafe_allow_html=True,
             )
-            with play:
+            with actions:
                 if t.get("online"):
                     cricket_launcher()
                 else:
                     open_blank_button(load_template(t["file"]), "▶  Play in new tab")
-            inspect.button("View code", key=f"inspect_{name}", on_click=inspect_template, args=(name,), width="stretch")
+                st.button("View code", key=f"inspect_tpl_{i}", on_click=inspect_template, args=(name,), width="stretch")
 
 
 def html_viewer_tab():

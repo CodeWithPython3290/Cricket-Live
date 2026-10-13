@@ -10,16 +10,18 @@
 <meta charset="utf-8">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap');
-  body { margin: 0; font-family: Inter, system-ui, sans-serif; }
-  button { width: 100%; height: 44px; border: 0; border-radius: 10px; cursor: pointer; font: 700 14px Inter, sans-serif;
-    color: #fff; letter-spacing: .01em; background: linear-gradient(135deg, #059669, #10b981);
-    box-shadow: 0 6px 18px rgba(16,185,129,.28); transition: transform .12s, box-shadow .12s; }
-  button:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(16,185,129,.35); }
-  #msg { font-size: 12px; color: #ef4444; margin-top: 4px; min-height: 14px; }
+  html, body { margin: 0; background: transparent; font-family: Inter, system-ui, sans-serif; overflow: hidden; }
+  button { display: block; width: 100%; height: 44px; border: 0; border-radius: 10px; cursor: pointer; font: 700 14px Inter, sans-serif;
+    color: #065f46; letter-spacing: .01em; background: #fff;
+    transition: background .12s; }
+  button:hover { background: #ecfdf5; }
+  #msg { font-size: 12px; color: #fecaca; margin-top: 6px; line-height: 1.3; }
+  #msg:empty { display: none; }
+  @media (max-width: 170px) { .long { display: none; } } /* narrow column: just "▶ Play" so it stays on one line */
 </style>
 </head>
 <body>
-<button id="play">▶&nbsp; Play in new tab</button>
+<button id="play">▶&nbsp; Play<span class="long"> in new tab</span></button>
 <div id="msg"></div>
 <script>
 (function () {
@@ -55,21 +57,25 @@
     Object.keys(res).forEach((id) => finish(id, res[id]));
   });
 
+  // The frame is exactly the button's height; it only grows when there's an error to show.
+  function showError(text) {
+    document.getElementById("msg").textContent = text;
+    post("streamlit:setFrameHeight", { height: text ? 66 : 44 });
+  }
   document.getElementById("play").onclick = async () => {
-    const msg = document.getElementById("msg");
-    msg.textContent = "";
+    showError("");
     const w = window.open("about:blank", "_blank");
-    if (!w) { msg.textContent = "Your browser blocked the new tab - allow this site to open tabs and try again."; return; }
+    if (!w) { showError("Your browser blocked the new tab. Allow this site to open tabs and try again."); return; }
     try {
       const html = await (await fetch("cricket_league_3d.html", { cache: "no-store" })).text();
       w.document.open(); w.document.write(html); w.document.close();
     } catch (err) {
-      w.close(); msg.textContent = "Couldn't load the game. Try again.";
+      w.close(); showError("Couldn't load the game. Try again.");
     }
   };
 
   post("streamlit:componentReady", { apiVersion: 1 });
-  post("streamlit:setFrameHeight", { height: 66 });
+  showError("");
 })();
 </script>
 </body>

@@ -408,15 +408,24 @@
     t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
   })();
   const T = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp });
+  // Cartoon outline: a back-facing copy pushed out along its normals, so every part gets the same line thickness.
   const OUTLINE = new THREE.MeshBasicMaterial({ color: 0x15171d, side: THREE.BackSide });
+  OUTLINE.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n  transformed += normalize(normal) * 0.016;");
+  };
+  const OUTLINE_BOX = new THREE.MeshBasicMaterial({ color: 0x15171d, side: THREE.BackSide }); // flat-sided parts: scaled copy
+  // A smooth body shape made by spinning a curved outline (radius, height) around the vertical axis.
+  const smoothLathe = (pts) => new THREE.LatheGeometry(new THREE.SplineCurve(pts.map(([r, y]) => new THREE.Vector2(r, y))).getPoints(28), 32);
   // Every limb is a capsule whose rounded ends sit exactly on its two joints, so arms and legs stay joined at any angle.
   const LEG = { thigh: 0.28, shin: 0.25, foot: 0.09 }, ARM = { upper: 0.25, fore: 0.22 };
   const HIP_Y = LEG.thigh + LEG.shin + LEG.foot;
   const legH = (h, k) => LEG.thigh * Math.cos(h) + (LEG.shin + LEG.foot) * Math.cos(h + k);
   const GEO = {
-    pelvis: new THREE.CapsuleGeometry(0.16, 0.14, 6, 14),
-    torso: new THREE.CapsuleGeometry(0.21, 0.24, 8, 18),
-    sash: new THREE.CylinderGeometry(0.218, 0.218, 0.07, 24, 1, true),
+    // shirt: waist -> chest -> rounded shoulders (relative to the spine joint)
+    torso: smoothLathe([[0.176, -0.04], [0.188, 0.06], [0.203, 0.2], [0.213, 0.34], [0.205, 0.46], [0.17, 0.56], [0.1, 0.63], [0.001, 0.655]]),
+    // trousers: seat -> hips, tucked under the shirt (relative to the hip joint)
+    hips: smoothLathe([[0.001, -0.135], [0.1, -0.125], [0.158, -0.07], [0.178, 0.0], [0.17, 0.05], [0.15, 0.1]]),
+    belt: new THREE.TorusGeometry(0.186, 0.02, 8, 36),
     collar: new THREE.TorusGeometry(0.12, 0.035, 8, 20),
     head: new THREE.SphereGeometry(0.27, 28, 22),
     eye: new THREE.SphereGeometry(0.055, 14, 10),
@@ -430,15 +439,15 @@
     upper: new THREE.CapsuleGeometry(0.078, ARM.upper, 4, 12),
     fore: new THREE.CapsuleGeometry(0.07, ARM.fore, 4, 12),
     hand: new THREE.SphereGeometry(0.085, 12, 10),
-    glove: new THREE.BoxGeometry(0.16, 0.15, 0.16),
+    glove: new THREE.CapsuleGeometry(0.074, 0.05, 6, 12),
     thigh: new THREE.CapsuleGeometry(0.1, LEG.thigh, 4, 12),
     shin: new THREE.CapsuleGeometry(0.088, LEG.shin, 4, 12),
-    sole: new THREE.BoxGeometry(0.176, 0.026, 0.31),
+    sole: new THREE.CapsuleGeometry(0.072, 0.15, 6, 12),
     jersey: new THREE.PlaneGeometry(0.24, 0.24),
     chest: new THREE.PlaneGeometry(0.15, 0.075),
     sticker: new THREE.BoxGeometry(0.1, 0.13, 0.004),
     pad: new THREE.CapsuleGeometry(0.108, 0.17, 4, 12),
-    shoe: new THREE.BoxGeometry(0.17, 0.1, 0.3),
+    shoe: new THREE.CapsuleGeometry(0.068, 0.15, 6, 12),
     helmet: new THREE.SphereGeometry(0.3, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.47),
     peak: new THREE.BoxGeometry(0.36, 0.025, 0.13),
     bar: new THREE.CylinderGeometry(0.011, 0.011, 0.34, 6),
@@ -457,7 +466,10 @@
 
   function addPart(parent, geo, m, x, y, z, sx = 1, sy = 1, sz = 1, outline = true) {
     const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.scale.set(sx, sy, sz); me.castShadow = true; parent.add(me);
-    if (outline) { const o = new THREE.Mesh(geo, OUTLINE); o.scale.setScalar(1.07); me.add(o); }
+    if (outline) {
+      const flat = geo.type === "BoxGeometry"; // pushing flat faces apart would crack the outline at the corners
+      const o = new THREE.Mesh(geo, flat ? OUTLINE_BOX : OUTLINE); if (flat) o.scale.setScalar(1.06); me.add(o);
+    }
     return me;
   }
   const group = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
@@ -494,18 +506,18 @@
     const skinM = T(o.skin || pick(SKIN)), white = T(0xf8fafc), shoeM = T(0xf1f5f9);
 
     u.hips = group(root, 0, HIP_Y, 0);
-    addPart(u.hips, GEO.pelvis, u.trouserM, 0, 0.02, 0, 1, 1, 0.82).rotation.z = Math.PI / 2;
+    addPart(u.hips, GEO.hips, u.trouserM, 0, 0, 0, 1.1, 1, 0.82);
     u.spine = group(u.hips, 0, 0.06, 0);
-    addPart(u.spine, GEO.torso, u.shirtM, 0, 0.3, 0, 1.1, 1, 0.85);
-    addPart(u.spine, GEO.sash, u.accentM, 0, 0.2, 0, 1.12, 1, 0.87, false); // waistband stripe
+    addPart(u.spine, GEO.torso, u.shirtM, 0, 0, 0, 1.1, 1, 0.82);
+    addPart(u.spine, GEO.belt, u.accentM, 0, 0.0, 0, 1.1, 0.82, 1, false).rotation.x = Math.PI / 2; // waistband
     addPart(u.spine, GEO.collar, u.accentM, 0, 0.58, 0, 1, 1, 1, false).rotation.x = Math.PI / 2;
     addPart(u.spine, GEO.neck, skinM, 0, 0.62, 0, 1, 1, 1, false);
     if (o.number) { // shirt number on the back, team code on the chest
       u.num = o.number;
       u.backM = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.35 });
       u.chestM = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.35 });
-      const back = new THREE.Mesh(GEO.jersey, u.backM); back.position.set(0, 0.37, 0.19); u.spine.add(back);
-      const chest = new THREE.Mesh(GEO.chest, u.chestM); chest.position.set(0.075, 0.45, -0.178); chest.rotation.y = Math.PI; u.spine.add(chest);
+      const back = new THREE.Mesh(GEO.jersey, u.backM); back.position.set(0, 0.37, 0.182); u.spine.add(back);
+      const chest = new THREE.Mesh(GEO.chest, u.chestM); chest.position.set(0, 0.45, -0.176); chest.rotation.y = Math.PI; u.spine.add(chest);
       setKitText(u, o.teamKey || "MI");
     }
 
@@ -543,8 +555,8 @@
       const kn = group(hp, 0, -LEG.thigh, 0); addPart(kn, GEO.shin, u.trouserM, 0, -LEG.shin / 2, 0);
       if (o.pads) addPart(kn, GEO.pad, white, 0, -0.12, -0.045, 1, 1, 0.75);
       const footY = -(LEG.shin + LEG.foot);
-      addPart(kn, GEO.shoe, shoeM, 0, footY + 0.05, -0.05);
-      addPart(kn, GEO.sole, u.accentM, 0, footY + 0.013, -0.05, 1, 1, 1, false);
+      addPart(kn, GEO.shoe, shoeM, 0, footY + 0.052, -0.05, 1.25, 1, 0.76).rotation.x = Math.PI / 2;
+      addPart(kn, GEO.sole, u.accentM, 0, footY + 0.022, -0.05, 1.22, 1.0, 0.3, false).rotation.x = Math.PI / 2;
       u["sh" + s] = sh; u["el" + s] = el; u["hip" + s] = hp; u["kn" + s] = kn;
     }
     root.userData = u; scene.add(root); stand(root); return root;
