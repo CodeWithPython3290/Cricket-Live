@@ -129,7 +129,14 @@
     background: linear-gradient(90deg, transparent, rgba(251,191,36,.12)); }
   .rb-info .eq { font-weight: 800; color: #fbbf24; font-size: 13.5px; }
   .rb-info .rates { color: rgba(255,255,255,.7); }
-  @media (max-width: 1000px) { .rb-over { display: none !important; } }
+  .rb-win { width: 150px; gap: 3px; font-size: 11px; }
+  .rb-win .lbl { color: rgba(255,255,255,.6); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 9.5px; }
+  .rb-win .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.15); }
+  .rb-win .bar span { display: block; height: 100%; transition: width .6s ease; }
+  .rb-win .pc { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  @media (max-width: 1240px) { .rb-over { display: none !important; } }
+  @media (max-width: 1000px) { .rb-info { display: none !important; } }
+  @media (max-width: 700px) { .rb-win { display: none !important; } }
   @media (max-width: 820px) { .rb-bowl { display: none !important; } }
   @media (max-width: 600px) { .rb-info { display: none !important; } #rbScore { font-size: 22px; } .rb-team { font-size: 16px; } }
   #topR { position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; align-items: center; }
@@ -168,6 +175,7 @@
     <div class="rb-bat" id="rbBat"></div>
     <div class="rb-bowl" id="rbBowl"></div>
     <div class="rb-over" id="rbOver"></div>
+    <div class="rb-win" id="rbWin"></div>
     <div class="rb-info" id="rbInfo"></div>
   </div>
   <div id="topR"><div id="speed"></div><button id="menuBtn" class="icon-btn" title="Menu">☰</button></div>
@@ -402,13 +410,77 @@
     g.fillStyle = "rgba(0,0,0,.35)"; for (let y = 0; y < h; y += 48) g.fillRect(0, y, w, 3);
   });
   crowdTex.wrapS = THREE.RepeatWrapping; crowdTex.repeat.set(6, 1);
-  const stands = new THREE.Mesh(new THREE.CylinderGeometry(124, 90, 28, 96, 1, true),
+  // Seating: concrete stepped tiers (lower bowl) with individual spectators, and an upper stand behind them.
+  const TIER = { r0: 72, depth: 1.15, rise: 0.55, rows: 14, y0: 0.9 };
+  TIER.rEnd = TIER.r0 + TIER.rows * TIER.depth; TIER.yEnd = TIER.y0 + (TIER.rows - 1) * TIER.rise;
+  const UPPER = { r0: 90, y0: 9.4, r1: 128, y1: 34 };
+  // Height of the seating at a distance r from the centre of the ground (0 = grass, -1 = beyond the stadium).
+  function standHeight(r) {
+    if (r < TIER.r0) return 0;
+    if (r < TIER.rEnd) return TIER.y0 + Math.floor((r - TIER.r0) / TIER.depth) * TIER.rise;
+    if (r < UPPER.r0) return TIER.yEnd;
+    if (r < UPPER.r1) return UPPER.y0 + (r - UPPER.r0) / (UPPER.r1 - UPPER.r0) * (UPPER.y1 - UPPER.y0);
+    return -1;
+  }
+  const steps = [new THREE.Vector2(TIER.r0, 0)];
+  for (let i = 0; i < TIER.rows; i++) {
+    const y = TIER.y0 + i * TIER.rise, r = TIER.r0 + i * TIER.depth;
+    steps.push(new THREE.Vector2(r, y), new THREE.Vector2(r + TIER.depth, y));
+  }
+  steps.push(new THREE.Vector2(UPPER.r0, TIER.yEnd), new THREE.Vector2(UPPER.r0, 0));
+  const tiers = new THREE.Mesh(new THREE.LatheGeometry(steps, 120), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.DoubleSide }));
+  tiers.position.copy(CENTER); tiers.receiveShadow = true; scene.add(tiers);
+  const stands = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r1, UPPER.r0, UPPER.y1 - UPPER.y0, 96, 1, true),
     new THREE.MeshLambertMaterial({ map: crowdTex, side: THREE.BackSide }));
-  stands.position.set(CENTER.x, 14, CENTER.z); scene.add(stands);
-  const roof = new THREE.Mesh(new THREE.RingGeometry(112, 130, 96), new THREE.MeshLambertMaterial({ color: 0xe5e7eb, side: THREE.DoubleSide }));
-  roof.rotation.x = -Math.PI / 2; roof.position.set(CENTER.x, 30, CENTER.z); scene.add(roof);
+  stands.position.set(CENTER.x, (UPPER.y0 + UPPER.y1) / 2, CENTER.z); scene.add(stands);
+  const roof = new THREE.Mesh(new THREE.RingGeometry(UPPER.r1 - 18, UPPER.r1 + 4, 96), new THREE.MeshLambertMaterial({ color: 0xe5e7eb, side: THREE.DoubleSide }));
+  roof.rotation.x = -Math.PI / 2; roof.position.set(CENTER.x, UPPER.y1 + 1, CENTER.z); scene.add(roof);
+
+  // Spectators: thousands of instanced fans (body + head) facing the pitch. A small shader makes them sway,
+  // and jump up and down when the crowd cheers (boundaries and wickets).
+  const crowdUniforms = { uTime: { value: 0 }, uCheer: { value: 0 } };
+  let crowdCheer = 0;
+  function crowdMaterial() {
+    const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    m.onBeforeCompile = (s) => {
+      s.uniforms.uTime = crowdUniforms.uTime; s.uniforms.uCheer = crowdUniforms.uCheer;
+      s.vertexShader = "attribute float aPhase;\nuniform float uTime;\nuniform float uCheer;\n" + s.vertexShader.replace("#include <begin_vertex>",
+        "#include <begin_vertex>\n  float joins = step(0.22, fract(aPhase * 7.0));\n" +
+        "  transformed.y += max(0.0, sin(uTime * 9.0 + aPhase * 6.283)) * 0.4 * uCheer * joins + sin(uTime * 1.3 + aPhase * 40.0) * 0.015;");
+    };
+    return m;
+  }
+  (() => {
+    const seats = [];
+    for (let row = 0; row < TIER.rows; row++) {
+      const r = TIER.r0 + (row + 0.55) * TIER.depth, y = TIER.y0 + row * TIER.rise, n = Math.floor(2 * Math.PI * r / 0.82);
+      for (let i = 0; i < n; i++) {
+        const a = ((i + (row % 2) * 0.5) / n) * Math.PI * 2, x = Math.sin(a) * r;
+        if (Math.abs(x) < 10 && Math.abs(Math.cos(a)) > 0.9) continue; // behind the sightscreens
+        if (Math.random() < 0.1) continue; // a few empty seats
+        seats.push([CENTER.x + x, y, CENTER.z + Math.cos(a) * r, a]);
+      }
+    }
+    const body = new THREE.CapsuleGeometry(0.2, 0.28, 3, 8); body.translate(0, 0.42, 0);
+    const head = new THREE.SphereGeometry(0.14, 10, 8); head.translate(0, 0.88, 0);
+    const phase = new Float32Array(seats.length).map(() => Math.random());
+    const shirts = [0xef4444, 0x3b82f6, 0xfacc15, 0xf8fafc, 0x10b981, 0xf97316, 0xa855f7, 0x0ea5e9, 0xec4899, 0x111827, ...TEAM_KEYS.map((k) => IPL[k].c1)];
+    const skins = [0xf1c27d, 0xe0ac69, 0xc68e5e, 0xa86b3c, 0x8d5524];
+    const bodies = new THREE.InstancedMesh(body, crowdMaterial(), seats.length), heads = new THREE.InstancedMesh(head, crowdMaterial(), seats.length);
+    const dummy = new THREE.Object3D(), col = new THREE.Color();
+    seats.forEach(([x, y, z, a], i) => {
+      dummy.position.set(x, y, z); dummy.rotation.set(0, a + Math.PI, 0); dummy.scale.setScalar(rand(0.9, 1.1)); dummy.updateMatrix();
+      bodies.setMatrixAt(i, dummy.matrix); heads.setMatrixAt(i, dummy.matrix);
+      bodies.setColorAt(i, col.setHex(pick(shirts))); heads.setColorAt(i, col.setHex(pick(skins)));
+    });
+    for (const m of [bodies, heads]) {
+      m.geometry.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phase, 1));
+      m.frustumCulled = false; scene.add(m);
+    }
+  })();
+
   for (let i = 0; i < 4; i++) {
-    const a = Math.PI / 4 + i * Math.PI / 2, x = CENTER.x + Math.sin(a) * 128, z = CENTER.z + Math.cos(a) * 128;
+    const a = Math.PI / 4 + i * Math.PI / 2, x = CENTER.x + Math.sin(a) * 136, z = CENTER.z + Math.cos(a) * 136;
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.3, 62, 8), M(0x94a3b8)); pole.position.set(x, 31, z); scene.add(pole);
     const head = new THREE.Mesh(new THREE.BoxGeometry(12, 7, 1.2), new THREE.MeshBasicMaterial({ color: 0xfffbea }));
     head.position.set(x, 63, z); head.lookAt(CENTER.x, 0, CENTER.z); scene.add(head);
@@ -660,9 +732,17 @@
   umpire.position.set(1.2, 0, -22.4); umpire.rotation.y = Math.PI;
   const keeper = makePlayer(kit("CSK", { head: "helmet", pads: true, gloves: true, sleeves: true }));
   keeper.userData.home = V(0.15, 0, 2.6);
-  // fielding positions [distance, angle]; the first is slip (off side, behind the bat)
-  const FIELD = [[6.5, -(Math.PI - 0.35)], [22, 1.75], [27, 1.05], [26, 0.32], [26, -0.32], [28, -1.05], [22, -1.75], [52, -2.55], [56, -0.75]];
+  // Field placings [name, angle, distance from the batter] (angle: 0 = straight, + = leg side, - = off side).
+  // "deep" fielders patrol just inside the boundary rope.
   const dirVec = (a) => V(Math.sin(a), 0, -Math.cos(a));
+  const FIELD_SPEC = [["slip", -(Math.PI - 0.35), 6.5], ["point", -1.65, 24], ["cover", -0.95, 27], ["mid-off", -0.3, 25],
+    ["mid-on", 0.32, 25], ["mid-wicket", 1.0, 27], ["square leg", 1.7, 23], ["deep mid-wicket", 0.8, "deep"], ["deep cover", -1.2, "deep"]];
+  const FIELD = FIELD_SPEC.map(([, a, r]) => {
+    if (r !== "deep") return [r, a];
+    const p = rayCircle(V(0, 0, ZH), dirVec(a), BOUNDARY - 3.5);
+    return [Math.hypot(p.x, p.z - ZH), a];
+  });
+  const fielderName = (idx) => (idx === -1 ? "the keeper" : FIELD_SPEC[idx][0]);
   const fielders = FIELD.map(([r, a]) => {
     const f = makePlayer(kit("CSK"));
     f.userData.home = V(0, 0, ZH).addScaledVector(dirVec(a), r); f.userData.ready = 0;
@@ -746,6 +826,44 @@
     if (inp) inp.onchange = () => onPick(clamp(Math.round(+inp.value || 1), 1, 50));
   }
 
+  // ---------------- win probability
+  // Past results are remembered in this browser, so teams that have been winning get a small edge.
+  function matchHistory() { try { return JSON.parse(store.get("cl3d_history") || "[]"); } catch (e) { return []; } }
+  function recordMatch(winKey, loseKey) {
+    const h = matchHistory(); h.push({ w: winKey, l: loseKey }); store.set("cl3d_history", JSON.stringify(h.slice(-60)));
+  }
+  function teamForm(key) { // smoothed win rate from past matches (0.5 with no history)
+    let w = 0, l = 0; matchHistory().forEach((m) => { if (m.w === key) w++; if (m.l === key) l++; });
+    return (w + 1) / (w + l + 2);
+  }
+  function normCdf(x) { // standard normal CDF (Abramowitz & Stegun 26.2.17)
+    const t = 1 / (1 + 0.2316419 * Math.abs(x)), d = 0.3989423 * Math.exp(-x * x / 2);
+    const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    return x > 0 ? 1 - p : p;
+  }
+  // Chance (0-1) that the batting side wins, from the score, wickets, balls left, the run rate so far, the current
+  // batters' strike rates and past results between these teams.
+  function winProbability() {
+    const inn = S.inn, W = S.cfg.wkts, total = S.cfg.overs * 6, left = total - inn.balls, wl = W - inn.wkts;
+    const played = S.innings.filter(Boolean), r = played.reduce((s, x) => s + x.runs, 0), b = played.reduce((s, x) => s + x.balls, 0);
+    const rate = (9 * 18 + (b ? (r / b) * 6 : 9) * (b / 6)) / (18 + b / 6); // T20 par of 9 an over, blended with this match
+    const k = 3 / Math.max(1, W), res = (w) => (1 - Math.exp(-k * w)) / (1 - Math.exp(-k * W)); // wickets in hand as "resources"
+    const sr = [inn.batters[inn.striker], inn.batters[inn.non]].filter(Boolean).map((p) => (p.balls >= 4 ? (p.runs / p.balls) * 100 : 140));
+    const batForm = clamp(((sr.reduce((a, x) => a + x, 0) / Math.max(1, sr.length)) / 145 - 1) * 0.25, -0.12, 0.12);
+    const hist = teamForm(S.teams[inn.bat].key) - teamForm(S.teams[inn.bowl].key);
+    const rateNow = rate * (1 + batForm + hist * 0.15);
+    const wktWeight = clamp(left / (wl * 10 + 1), 0, 1); // losing wickets matters more with lots of balls left
+    const expected = (left / 6) * rateNow * lerp(1, res(wl), wktWeight);
+    if (S.target) {
+      const need = S.target - inn.runs;
+      if (need <= 0) return 1;
+      if (left <= 0 || wl <= 0) return 0;
+      return normCdf((expected - need + 0.5) / (Math.sqrt(left) * 1.6 + 2));
+    }
+    const projected = inn.runs + (wl > 0 ? expected : 0), chase = (total / 6) * rate * (1 - hist * 0.15);
+    return 1 - normCdf((chase - projected) / (Math.sqrt(2.6 * (left + total)) + 3));
+  }
+
   // Bowlers: the bowling side's five frontline bowlers (the end of its batting order) take turns, one over each.
   const BOWL_ROTATION = [10, 9, 8, 7, 6];
   const bowlerIdx = (inn) => BOWL_ROTATION[Math.floor(inn.balls / 6) % BOWL_ROTATION.length];
@@ -763,6 +881,9 @@
     const bi = bowlerIdx(inn), f = inn.bowling[bi] || { balls: 0, runs: 0, wkts: 0 };
     $("rbBowl").innerHTML = `<div class="n">${esc(bowlerName(inn, bi))}</div><div><b>${f.wkts}-${f.runs}</b><small>(${oversStr(f.balls)})</small></div>`;
     $("rbOver").innerHTML = S.thisOver.map((b) => `<span class="b b${b}">${b === 0 ? "•" : b}</span>`).join("") || '<span class="empty">This over</span>';
+    const wp = Math.round(clamp(winProbability(), 0.01, 0.99) * 100), bw = S.teams[inn.bowl], tb = IPL[bw.key] || IPL.MI;
+    $("rbWin").innerHTML = `<div class="lbl">Win probability</div><div class="bar"><span style="width:${wp}%;background:${hex(t.c1)}"></span>` +
+      `<span style="width:${100 - wp}%;background:${hex(tb.c1)}"></span></div><div class="pc"><b>${bt.key} ${wp}%</b><b>${100 - wp}% ${bw.key}</b></div>`;
     const crr = inn.balls ? (inn.runs / inn.balls * 6).toFixed(2) : "0.00";
     if (S.target) {
       const need = S.target - inn.runs, left = S.cfg.overs * 6 - inn.balls;
@@ -861,6 +982,7 @@
     if (b.runs >= S.target) { const w = S.cfg.wkts - b.wkts; winner = b.bat; title = `🏆 ${esc(S.teams[b.bat].name)} won by ${w} wicket${w === 1 ? "" : "s"}`; }
     else if (b.runs === S.target - 1) title = "🤝 Match tied!";
     else { const r = S.target - 1 - b.runs; winner = a.bat; title = `🏆 ${esc(S.teams[a.bat].name)} won by ${r} run${r === 1 ? "" : "s"}`; }
+    if (winner !== null) recordMatch(S.teams[winner].key, S.teams[1 - winner].key); // feeds the win-probability model
     const row = (inn) => {
       const top = inn.batters.slice().sort((x, y) => y.runs - x.runs)[0];
       return `<div class="r">${badgeHTML(S.teams[inn.bat].key, "sm")}<div class="grow"><b>${esc(S.teams[inn.bat].name)}</b><br>` +
@@ -1026,50 +1148,41 @@
     backDefend: [-0.6, 0.6], dig: [-0.5, 0.5], drive: [-1.3, 1.0], loft: [-1.1, 1.0] };
   const fitAngle = (shot, a) => (SHOT_ARC[shot] ? clamp(a, SHOT_ARC[shot][0], SHOT_ARC[shot][1]) : a);
 
+  // How the ball comes off the bat. The actual result (runs, catch, boundary) is then worked out by the ball physics
+  // and the fielders in computeHit().
+  const CATCH_RATE = 0.83, STOP_RATE = 0.9;
   function computeOutcome(h) {
     const { q, loft, shot } = h, r = Math.random();
     const block = shot === "defend" || shot === "backDefend" || shot === "dig";
     const edge = q === "edge" && !block;
-    let runs = 0, out = null, aerial = false;
-    if (block) { if (q === "edge" && r < 0.08) out = "caught"; else runs = q === "perfect" && shot === "dig" && r < 0.3 ? 4 : pick([0, 0, 0, 1, 1]); }
-    else if (q === "perfect") {
-      if (shot === "pull") runs = loft || r < 0.35 ? (r < 0.6 ? 6 : 4) : 4;
-      else if (shot === "cut") runs = r < 0.75 ? 4 : 3;
-      else if (shot === "sweep") runs = loft && r < 0.5 ? 6 : r < 0.7 ? 4 : 2;
-      else if (shot === "flick") runs = r < 0.55 ? 4 : r < 0.8 ? 2 : 6;
-      else if (loft || shot === "loft") runs = r < 0.85 ? 6 : 4;
-      else runs = r < 0.65 ? 4 : r < 0.85 ? 3 : 2;
-      aerial = runs === 6;
-    } else if (q === "good") {
-      if (loft || shot === "loft") { if (r < 0.16) out = "caught"; else runs = pick([6, 4, 4, 2, 1]); aerial = runs !== 4; }
-      else if (shot === "pull") { if (r < 0.1) out = "caught"; else runs = pick([1, 2, 4, 4, 6]); aerial = runs === 6; }
-      else if (shot === "sweep") { if (r < 0.08) out = "caught"; else runs = pick([1, 1, 2, 4]); }
-      else runs = pick([1, 1, 2, 2, 3, 4]);
-    } else { // edged or mistimed
-      if (loft || shot === "pull" || shot === "sweep") { if (r < (loft ? 0.42 : 0.28)) out = "caught"; else runs = pick([0, 1, 2]); aerial = true; }
-      else if (r < 0.14) out = "caught"; else runs = pick([0, 0, 1, 1, 2, 4]);
+    const big = !block && (loft || shot === "loft" || ((shot === "pull" || shot === "sweep") && r < 0.35));
+    const o = { shot, a: h.a, q, loft: big, defend: block, edge, aerial: false, carry: 0, apex: 0, dist: 0, hop: rand(0.8, 2.2), six: null };
+    if (edge) {
+      o.a = shot === "pull" || shot === "sweep" || shot === "flick"
+        ? rand(2.2, 2.9) * (Math.random() < 0.75 ? 1 : -1)            // top or inside edge, fine on the leg side
+        : -(Math.PI - rand(0.2, 0.75)) * (Math.random() < 0.85 ? 1 : -1); // outside edge towards the slips / third man
+      if (big) { o.aerial = true; o.carry = rand(12, 40); o.apex = rand(10, 22); } // skied top edge
+      else if (Math.random() < 0.55) { o.aerial = true; o.carry = rand(4, 16); o.apex = rand(1.0, 3.2); } // nick that carries
+      else o.dist = rand(8, 40); // runs away fine
+    } else if (block) {
+      o.dist = q === "perfect" && shot === "dig" ? rand(20, 50) : rand(3, 12); o.hop = 0.5;
+    } else if (big) {
+      o.aerial = true;
+      if (q === "perfect") { // middled: over the rope, sometimes deep into the crowd or out of the ground
+        const k = Math.random();
+        o.six = k < 0.25 ? "rope" : k < 0.65 ? "crowd" : k < 0.88 ? "upper" : "out";
+        if (shot === "sweep" && o.six === "out") o.six = "upper"; // sweeps don't carry that far
+      } else if (q === "good") { o.carry = rand(34, 68); o.apex = rand(12, 24); } // well struck, but deep fielders are in play
+      else { o.carry = rand(14, 42); o.apex = rand(10, 24); } // mistimed: skied somewhere in the field
+    } else {
+      o.dist = q === "perfect" ? 95 : q === "good" ? rand(26, 60) : rand(10, 30);
+      if (shot === "cut" || shot === "pull") o.dist *= 1.05;
     }
-    let a = h.a;
-    if (edge) a = shot === "pull" || shot === "sweep" || shot === "flick"
-      ? rand(2.2, 2.9) * (Math.random() < 0.75 ? 1 : -1)            // top or inside edge, fine on the leg side
-      : -(Math.PI - rand(0.2, 0.75)) * (Math.random() < 0.85 ? 1 : -1); // outside edge towards the slips / third man
-    let dist = out ? rand(18, 42) : ({ 0: rand(4, 10), 1: rand(14, 24), 2: rand(26, 38), 3: rand(40, 52) }[runs] || 0);
-    // Ground shots hit straight at a fielder get cut off, so batters have to find the gaps.
-    let stopped = false;
-    if (!out && !aerial && !block && runs >= 1) {
-      const reach = runs === 4 ? 70 : dist + 6;
-      FIELD.slice(1).forEach(([r, fa]) => {
-        const diff = Math.abs(Math.atan2(Math.sin(a - fa), Math.cos(a - fa)));
-        if (!stopped && r < reach && diff < (r < 30 ? 0.22 : 0.15) && Math.random() < 0.75) {
-          stopped = true; runs = r < 30 ? pick([0, 0, 1]) : pick([1, 1, 2]); dist = r - 1;
-        }
-      });
-    }
-    return { runs, out, aerial: aerial || !!out, a, dist, edge, loft, defend: block, shot, stopped };
+    return o;
   }
   function shotName(o) {
     if (o.edge) return "Off the edge";
-    if (o.stopped) return shotName(Object.assign({}, o, { stopped: false })) + " · fielded";
+    if (o.stopped && !o.defend) return shotName(Object.assign({}, o, { stopped: false })) + " · fielded";
     const a = o.a;
     switch (o.shot) {
       case "drive": return a < -0.55 ? "Cover drive" : a > 0.35 ? "On drive" : "Straight drive";
@@ -1093,57 +1206,177 @@
     fielders.forEach((f, i) => { const d = f.userData.home.distanceTo(p); if (d < bd) { bd = d; best = i; } });
     return best;
   }
+  // ---------------- ball physics
+  // The struck ball is stepped forward with gravity, a little air drag, bounces (losing energy), rolling friction,
+  // the advertising boards and the stands. The whole path is worked out once, on the batter's computer, and the
+  // same path is replayed on the other computer in online play.
+  const SIM_DT = 1 / 60, BALL_R = 0.075, ROLL_DECEL = 3.0, RUN_SPEED = 6.8, REACT = 0.32;
+  const radial = (x, z) => Math.hypot(x - CENTER.x, z - CENTER.z);
+  function simulate(P0, V0, maxT) {
+    const p = P0.clone(), v = V0.clone(), pts = [p.toArray()], ev = { land: -1, rope: -1, stand: -1, out: -1, boards: -1 };
+    let rolling = false;
+    const N = Math.round((maxT || 9) / SIM_DT);
+    for (let i = 1; i <= N; i++) {
+      if (!rolling) { v.y -= G * SIM_DT; v.multiplyScalar(1 - 0.015 * SIM_DT); }
+      p.addScaledVector(v, SIM_DT);
+      const r = radial(p.x, p.z);
+      if (ev.rope < 0 && r > BOUNDARY) ev.rope = i;
+      if (ev.out < 0 && r > UPPER.r1 - 2 && p.y > UPPER.y1) ev.out = i; // cleared the roof
+      if (ev.out >= 0) { pts.push(p.toArray()); if (r > 175) break; continue; }
+      const floor = standHeight(r);
+      if (floor > 0 && p.y <= floor + BALL_R) { p.y = floor + BALL_R; ev.stand = i; pts.push(p.toArray()); break; } // in the crowd
+      if (p.y <= BALL_R) {
+        p.y = BALL_R;
+        if (ev.land < 0) ev.land = i;
+        if (!rolling && v.y < -1.2) { v.y = -v.y * 0.42; v.x *= 0.78; v.z *= 0.78; } else { v.y = 0; rolling = true; }
+      }
+      if (r > BOUNDARY + 2.9 && p.y < 1.15 && floor === 0) { // thuds into the advertising boards
+        if (ev.boards < 0) ev.boards = i;
+        const nx = (p.x - CENTER.x) / r, nz = (p.z - CENTER.z) / r, vr = v.x * nx + v.z * nz;
+        if (vr > 0) { v.x -= 1.3 * vr * nx; v.z -= 1.3 * vr * nz; v.multiplyScalar(0.4); }
+      }
+      if (rolling) {
+        const sp = Math.hypot(v.x, v.z);
+        if (sp < 0.3) { pts.push(p.toArray()); break; }
+        const k = Math.max(0, sp - ROLL_DECEL * SIM_DT) / sp; v.x *= k; v.z *= k;
+      }
+      pts.push(p.toArray());
+    }
+    return { pts, ev };
+  }
+  // Ground shot: find the bat speed that makes the ball roll about `stopDist` metres (or reach the boards).
+  function launchGround(P0, dir, stopDist, hop) {
+    let lo = 2, hi = 48;
+    for (let k = 0; k < 14; k++) {
+      const mid = (lo + hi) / 2, s = simulate(P0, V(dir.x * mid, hop, dir.z * mid), 8), e = s.pts[s.pts.length - 1];
+      if (Math.hypot(e[0] - P0.x, e[2] - P0.z) < stopDist && s.ev.boards < 0) lo = mid; else hi = mid;
+    }
+    const v = stopDist > 80 ? hi * 1.12 : hi; // boundary-bound shots arrive with some pace
+    return V(dir.x * v, hop, dir.z * v);
+  }
+  // Aerial shot: launch so the ball peaks at `apex` metres and comes down `carry` metres away.
+  function launchAerial(P0, dir, carry, apex) {
+    const vy = Math.sqrt(2 * G * Math.max(0.4, apex - P0.y)), T = vy / G + Math.sqrt(2 * Math.max(0.1, apex - BALL_R) / G);
+    const vh = (carry / T) * 1.03; // a touch extra to allow for air drag
+    return V(dir.x * vh, vy, dir.z * vh);
+  }
+  // The first fielder (or the keeper) who can get to the ball in time: "catch" = in the air between knee and
+  // above-head height, "stop" = along the ground. Fielders react, then run at RUN_SPEED.
+  function findFielder(pts, from, to, mode, exclude) {
+    for (let i = Math.max(1, from); i < Math.min(to, pts.length); i++) {
+      const [x, y, z] = pts[i], t = i * SIM_DT;
+      if (radial(x, z) > BOUNDARY - 0.3) return null; // over the rope: out of reach
+      if (mode === "catch" ? y < 0.25 || y > 2.7 : y > 1.4) continue;
+      for (let idx = -1; idx < fielders.length; idx++) {
+        if (exclude && exclude.has(idx)) continue;
+        const h = idx === -1 ? keeper.userData.home : fielders[idx].userData.home;
+        const reach = (mode === "catch" ? 1.0 : 1.3) + (idx === -1 ? 3.5 : RUN_SPEED) * Math.max(0, t - REACT);
+        if (Math.hypot(h.x - x, h.z - z) <= reach) return { i, idx };
+      }
+    }
+    return null;
+  }
+
   function computeHit(h) {
     const d = S.del, o = computeOutcome(h);
-    const P0 = ball.position.clone(); if (P0.z > -0.4) P0.set(d.xH, 0.7, ZH); P0.y = Math.max(0.3, P0.y);
-    const dirV = dirVec(o.a);
-    let P1, apex = 0, hop = 0.5, catcher = null, dur;
-    if (o.out) {
-      if (o.edge) { catcher = Math.random() < 0.5 ? -1 : 0; P1 = (catcher === -1 ? keeper.userData.home : fielders[0].userData.home).clone().setY(1.0); apex = 0.6; }
-      else {
-        const cand = P0.clone().addScaledVector(dirV, o.dist); cand.y = 0;
-        catcher = nearestFielderIdx(cand);
-        const home = fielders[catcher].userData.home, off = cand.sub(home); off.clampLength(0, 7);
-        P1 = home.clone().add(off).setY(1.3); apex = rand(9, 18);
+    const P0 = ball.position.clone(); if (P0.z > -0.4) P0.set(d.xH, 0.7, ZH); P0.y = clamp(P0.y, 0.3, 1.6);
+    const dir = dirVec(o.a);
+    if (o.six) { // [min radius, max radius, min apex, max apex] of where a middled six comes down
+      const cat = { rope: [66.5, 70.5, 16, 24], crowd: [74, 87, 22, 30], upper: [95, 115, 30, 40], out: [180, 180, 50, 58] }[o.six];
+      o.carry = rayCircle(P0, dir, rand(cat[0], cat[1])).setY(P0.y).distanceTo(P0); o.apex = rand(cat[2], cat[3]);
+    }
+    const V0 = o.aerial ? launchAerial(P0, dir, o.carry, o.apex) : launchGround(P0, dir, o.dist, o.hop);
+    const sim = simulate(P0, V0, o.six === "out" ? 12 : 9);
+    let pts = sim.pts, who = null, eventI = null;
+    const ev = sim.ev;
+    o.runs = 0; o.out = null; o.stopped = false; o.dropped = false;
+    // in the air: the first fielder who gets under it takes the catch (82%), otherwise it's dropped
+    if (o.aerial) {
+      const c = findFielder(pts, 1, ev.land >= 0 ? ev.land + 1 : pts.length, "catch");
+      if (c) {
+        who = c.idx; eventI = c.i;
+        if (Math.random() < CATCH_RATE) { o.out = "caught"; o.catcher = c.idx; pts = pts.slice(0, c.i + 1); }
+        else {
+          o.dropped = true; o.dropper = c.idx; o.runs = pick([0, 1, 1]);
+          const fall = simulate(V().fromArray(pts[c.i]), V(rand(-1.5, 1.5), 1.5, rand(-1.5, 1.5)), 3);
+          pts = pts.slice(0, c.i + 1).concat(fall.pts.slice(1));
+        }
       }
-    } else if (o.runs === 4) { P1 = rayCircle(P0, dirV, BOUNDARY + 1.5); hop = o.loft ? 2.5 : 0.7; }
-    else if (o.runs === 6) { P1 = rayCircle(P0, dirV, rand(71, 82)); P1.y = 0.1; apex = rand(16, 26); }
-    else { P1 = P0.clone().addScaledVector(dirV, o.dist).setY(0.04); if (o.aerial) apex = rand(5, 10); }
-    const len = Math.hypot(P1.x - P0.x, P1.z - P0.z);
-    if (o.out && o.edge) dur = 0.45;
-    else dur = o.aerial ? 1.3 + apex / 14 + len / 90 : clamp(len / rand(24, 32) * 1.6, 0.5, 3.2);
-    return { P0: P0.toArray(), P1: P1.toArray(), apex, hop, dur, o, catcher };
+    }
+    const six = !o.out && !o.dropped && (ev.out >= 0 || ev.stand >= 0 || (ev.rope >= 0 && (ev.land < 0 || ev.land > ev.rope)));
+    // along the ground: the first fielder who can reach it stops it 90% of the time (a misfield lets it run on)
+    if (!o.out && !o.dropped && !six) {
+      let from = o.aerial ? Math.max(1, ev.land) : 1;
+      const tried = new Set();
+      for (;;) {
+        const f = findFielder(pts, from, pts.length, "stop", tried);
+        if (!f) break;
+        if (Math.random() < STOP_RATE) { who = f.idx; eventI = f.i; o.stopped = true; pts = pts.slice(0, f.i + 1); break; }
+        tried.add(f.idx); from = f.i + 1;
+      }
+    }
+    const end = pts[pts.length - 1], depth = Math.hypot(end[0] - P0.x, end[2] - P0.z);
+    const four = !six && !o.out && !o.dropped && ev.rope >= 0 && ev.rope < pts.length;
+    if (six) {
+      o.runs = 6;
+      const li = ev.out >= 0 ? ev.out : ev.stand >= 0 ? ev.stand : ev.land >= 0 ? ev.land : pts.length - 1;
+      o.sixKind = ev.out >= 0 ? "out" : ev.stand >= 0 ? (radial(pts[li][0], pts[li][2]) > UPPER.r0 ? "upper" : "crowd") : "rope";
+      o.sixDist = Math.round(Math.hypot(pts[li][0] - P0.x, pts[li][2] - P0.z) + (ev.out >= 0 ? 15 : 0));
+    } else if (four) o.runs = 4;
+    else if (o.stopped) o.runs = depth < 14 ? 0 : depth < 28 ? pick([0, 1, 1]) : depth < 45 ? pick([1, 1, 2]) : pick([1, 2, 2]);
+    else if (!o.out && !o.dropped) o.runs = depth < 6 ? 0 : depth < 15 ? pick([0, 1]) : depth < 35 ? pick([1, 2]) : pick([2, 2, 3]);
+    if (o.defend && !four && depth < 15) o.runs = pick([0, 0, 1]);
+    // when to show the result: as the catch is taken / the ball is stopped / it crosses the rope / it lands in the crowd
+    const flashI = eventI !== null ? eventI
+      : six ? (ev.out >= 0 ? ev.out : ev.stand >= 0 ? ev.stand : ev.land >= 0 ? ev.land : ev.rope)
+      : four ? ev.rope : pts.length - 1;
+    const path = [], round = (v) => Math.round(v * 100) / 100; // every other step is plenty for playback
+    for (let i = 0; i < pts.length; i += 2) path.push(...pts[i].map(round));
+    if ((pts.length - 1) % 2) path.push(...pts[pts.length - 1].map(round));
+    return { path, pdt: SIM_DT * 2, flashT: flashI * SIM_DT, eventT: eventI !== null ? eventI * SIM_DT : null, who, o };
   }
   function applyHit(h) {
-    const P0 = new THREE.Vector3().fromArray(h.P0), P1 = new THREE.Vector3().fromArray(h.P1), o = h.o;
+    const o = h.o, n = h.path.length / 3, at = (i) => V(h.path[3 * i], h.path[3 * i + 1], h.path[3 * i + 2]);
     if (!S.shot && SHOTS[o.shot]) { // online: show the stroke the batter played, timed to meet the ball now
       S.swung = true; startShot(o.shot, o.a, NOW - SHOTS[o.shot].dur * SHOTS[o.shot].contact);
     }
-    if (o.out) {
-      const f = h.catcher === -1 ? keeper : fielders[h.catcher];
-      S.chaser = { f, target: P1.clone().setY(0), speed: 7.5 };
-    } else {
-      const f = fielders[nearestFielderIdx(P1)], tgt = P1.clone().setY(0), off = tgt.clone().sub(CENTER);
-      if (off.length() > BOUNDARY - 1.5) tgt.copy(CENTER).add(off.setLength(BOUNDARY - 1.5));
-      S.chaser = { f, target: tgt, speed: 7 };
+    const P0 = at(0), endP = at(n - 1);
+    let f, target, speed = 7;
+    if (h.who !== null && h.who !== undefined) { // the fielder who catches / stops / drops it runs to that spot in time
+      f = h.who === -1 ? keeper : fielders[h.who];
+      target = at(Math.min(n - 1, Math.round(h.eventT / h.pdt))).setY(0);
+      speed = clamp(f.position.distanceTo(target) / Math.max(0.25, h.eventT - REACT), 1.5, 9.5);
+    } else { // nobody reached it: the nearest fielder chases it down
+      f = fielders[nearestFielderIdx(endP)]; target = endP.clone().setY(0);
+      const off = target.clone().sub(CENTER);
+      if (off.length() > BOUNDARY - 1.5) target.copy(CENTER).add(off.setLength(BOUNDARY - 1.5));
     }
+    S.chaser = { f, target, speed, start: NOW + REACT };
     S.runners = !o.out && o.runs >= 1 && o.runs <= 3 ? { start: NOW + 0.25, runs: o.runs } : null;
-    S.hit = { P0, P1, apex: h.apex, hop: h.hop, dur: h.dur, start: NOW, o, dirV: dirVec(o.a), flashed: false };
+    const dur = (n - 1) * h.pdt;
+    S.hit = { path: h.path, n, pdt: h.pdt, start: NOW, o, dirV: dirVec(o.a), P0, P1: endP, flashT: h.flashT, flashed: false };
     S.phase = "hit"; ball.visible = true;
-    S.hitEnd = NOW + Math.max(h.dur + 1.0, S.runners ? o.runs * 1.25 + 1.0 : 0, 2.2);
+    S.hitEnd = NOW + Math.max(Math.min(dur, h.flashT + 3) + 1.2, S.runners ? o.runs * 1.25 + 1.0 : 0, 2.2);
     pitchMarker.visible = false; sfx.hit();
   }
+  const capFirst = (s) => s[0].toUpperCase() + s.slice(1);
   function announce(o) {
     const st = S.inn.batters[S.inn.striker];
-    if (o.out) { sfx.wicket(); S.celebrate = { t0: NOW }; showFlash("CAUGHT!", "#ef4444", `${st.name} ${st.runs} (${st.balls + 1})`); }
-    else if (o.runs === 6) { sfx.cheer(); showFlash("SIX!", "#c084fc", shotName(o)); }
-    else if (o.runs === 4) { sfx.cheer(); showFlash("FOUR!", "#60a5fa", shotName(o)); }
+    if (o.out) {
+      sfx.wicket(); crowdCheer = 0.7; S.celebrate = { t0: NOW };
+      showFlash("CAUGHT!", "#ef4444", `${st.name} c ${fielderName(o.catcher)} ${st.runs} (${st.balls + 1})`);
+    } else if (o.dropped) showFlash("DROPPED!", "#fb923c", `${capFirst(fielderName(o.dropper))} puts it down`);
+    else if (o.runs === 6) {
+      sfx.cheer(); crowdCheer = 1;
+      const where = { rope: "Over the rope", crowd: "Into the crowd!", upper: "Into the top tier!", out: "OUT OF THE GROUND!" }[o.sixKind] || "";
+      showFlash("SIX!", "#c084fc", `${where} · ${o.sixDist}m`);
+    } else if (o.runs === 4) { sfx.cheer(); crowdCheer = 0.8; showFlash("FOUR!", "#60a5fa", shotName(o)); }
     else if (o.runs === 0) showFlash(o.defend ? "DEFENDED" : "DOT BALL", "#f1f5f9", shotName(o));
     else showFlash(`${o.runs} RUN${o.runs > 1 ? "S" : ""}`, "#f8fafc", shotName(o));
   }
   function deadBall(res, text, color, sub) {
     S.result = res; S.phase = "dead"; S.deadEnd = NOW + 1.6; pitchMarker.visible = false;
-    if (res.out) S.celebrate = { t0: NOW };
+    if (res.out) { S.celebrate = { t0: NOW }; crowdCheer = 0.7; }
     showFlash(text, color, sub);
   }
   function applyDead(r) {
@@ -1254,14 +1487,11 @@
         break;
       }
       case "hit": {
-        const H = S.hit, s = clamp((NOW - H.start) / H.dur, 0, 1);
-        if (H.apex > 0 && H.o.aerial) {
-          ball.position.set(lerp(H.P0.x, H.P1.x, s), lerp(H.P0.y, H.P1.y, s) + 4 * H.apex * s * (1 - s), lerp(H.P0.z, H.P1.z, s));
-        } else {
-          const e = easeOut(s);
-          ball.position.set(lerp(H.P0.x, H.P1.x, e), 0.04 + Math.abs(Math.sin(e * Math.PI * 3)) * H.hop * (1 - e), lerp(H.P0.z, H.P1.z, e));
-        }
-        if (s >= 1 && !H.flashed) { H.flashed = true; announce(H.o); }
+        // replay the simulated flight of the ball
+        const H = S.hit, k = (NOW - H.start) / H.pdt, i = Math.min(H.n - 1, Math.floor(k)), j = Math.min(H.n - 1, i + 1), f = Math.min(1, k - i), P = H.path;
+        ball.position.set(lerp(P[3 * i], P[3 * j], f), lerp(P[3 * i + 1], P[3 * j + 1], f), lerp(P[3 * i + 2], P[3 * j + 2], f));
+        ball.visible = radial(ball.position.x, ball.position.z) < 170;
+        if (!H.flashed && NOW - H.start >= H.flashT) { H.flashed = true; announce(H.o); }
         if (S.runners) {
           const R = S.runners, kk = clamp((NOW - R.start) / 1.25, 0, R.runs), seg = Math.floor(kk), frac = kk - seg;
           const leg = seg % 2 === 0 ? frac : 1 - frac, moving = kk > 0 && kk < R.runs, goingUp = seg % 2 === 0;
@@ -1297,7 +1527,8 @@
     });
     if (S.chaser) {
       const c = S.chaser, f = c.f, to = c.target.clone().sub(f.position).setY(0), dist = to.length();
-      if (dist > 0.3) { f.position.addScaledVector(to.normalize(), Math.min(dist, c.speed * dt)); face(f, c.target.x, c.target.z); animRun(f, NOW * 13, 1); }
+      if (c.start && NOW < c.start) face(f, c.target.x, c.target.z); // reacting to the shot
+      else if (dist > 0.3) { f.position.addScaledVector(to.normalize(), Math.min(dist, c.speed * dt)); face(f, c.target.x, c.target.z); animRun(f, NOW * 13, 1); }
       else if (f !== keeper) {
         stand(f);
         if (S.hit && S.hit.o.out) { f.userData.shL.rotation.set(-2.6, 0, -0.2); f.userData.shR.rotation.set(-2.6, 0, 0.2); } // took the catch
@@ -1728,6 +1959,8 @@
     NOW = performance.now() / 1000;
     const dt = Math.min(0.05, NOW - last); last = NOW;
     update(dt); updateCamera(dt);
+    crowdCheer = Math.max(0, crowdCheer - dt * 0.3); // the crowd settles down a few seconds after a cheer
+    crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
     renderer.render(scene, camera);
   }
   loop();
