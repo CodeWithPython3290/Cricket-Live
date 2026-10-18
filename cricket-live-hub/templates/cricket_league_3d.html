@@ -687,6 +687,101 @@
     ground.material.emissive.setHex(W.frost ? 0x3a4440 : 0x000000); // a frosty, whitened outfield in the snow
     Object.assign(PHYS, { roll: W.roll, bounce: W.bounce, swing: W.swing });
     $("wx").innerHTML = `${W.icon} ${c.temp}°C <span>${esc(VENUES[c.venue][1])}</span>`;
+    if (typeof drawBoard === "function" && boardTex) drawBoard();
+  }
+
+  // ---------------- giant stadium screen (IPL style)
+  // A big LED screen standing at the far end, beside the sightscreen, in view of the batting camera. It shows the live
+  // scorecard and flashes up big moments (four, six, wicket, milestones). Redrawn only when something changes.
+  const BOARD = { w: 18, h: 9, a: 0.36 };
+  const boardCanvas = document.createElement("canvas"); boardCanvas.width = 1024; boardCanvas.height = 512;
+  const bctx = boardCanvas.getContext("2d");
+  const boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.anisotropy = 4;
+  (() => {
+    const r = BOUNDARY + 5.3, g = new THREE.Group(); // on the grass between the advertising boards and the stands
+    g.position.set(CENTER.x + Math.sin(BOARD.a) * r, 0.7 + BOARD.h / 2, CENTER.z + Math.cos(BOARD.a) * r);
+    g.lookAt(CENTER.x, g.position.y, CENTER.z); // face the ground
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(BOARD.w + 1.2, BOARD.h + 1.2, 0.9), M(0x111827)); frame.position.z = -0.5;
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(BOARD.w, BOARD.h), new THREE.MeshBasicMaterial({ map: boardTex, fog: false }));
+    g.add(frame, screen);
+    for (const sx of [-BOARD.w * 0.35, BOARD.w * 0.35]) { // support posts
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.4, 0.5), M(0x374151)); post.position.set(sx, -BOARD.h / 2 - 0.5, -0.5); g.add(post);
+    }
+    scene.add(g);
+  })();
+  let boardMsg = null, boardDrawnAt = 0;
+  function boardEvent(title, sub, color) { boardMsg = { title, sub: sub || "", color, until: NOW + 3.2 }; drawBoard(); }
+  const ledDots = (() => { // dark gaps between LED pixels
+    const c = document.createElement("canvas"); c.width = c.height = 4; const g = c.getContext("2d");
+    g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(3, 0, 1, 4); g.fillRect(0, 3, 4, 1); return c;
+  })();
+  function drawBoard() {
+    const g = bctx, W = 1024, H = 512, inn = S.inn, c = S.conditions;
+    const font = (w, s) => `${w} ${s}px Inter, Arial, sans-serif`;
+    boardDrawnAt = NOW;
+    const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, "#0a1433"); bg.addColorStop(1, "#1b2f75");
+    g.fillStyle = bg; g.fillRect(0, 0, W, H); g.textBaseline = "middle";
+    // header
+    g.fillStyle = "#fbbf24"; g.fillRect(0, 0, W, 6);
+    g.fillStyle = "rgba(255,255,255,0.08)"; g.fillRect(0, 6, W, 58);
+    g.font = font(900, 30); g.fillStyle = "#fff"; g.textAlign = "left"; g.fillText("CRICKET LEAGUE 3D", 28, 36);
+    if (c) {
+      g.textAlign = "right"; g.font = font(700, 22); g.fillStyle = "rgba(255,255,255,.75)";
+      g.fillText(`${VENUES[c.venue][0].toUpperCase()} · ${WEATHER[c.weather].icon} ${c.temp}°C`, W - 28, 36);
+    }
+    if (boardMsg && NOW < boardMsg.until) { // full-screen moment, flashing
+      const on = Math.floor(NOW * 5) % 2 === 0;
+      g.fillStyle = on ? boardMsg.color : "#0a1433"; g.fillRect(0, 64, W, H - 64);
+      g.textAlign = "center"; g.fillStyle = on ? "#0a1433" : boardMsg.color; g.font = font(900, 150); g.fillText(boardMsg.title, W / 2, 250, W - 60);
+      g.font = font(800, 38); g.fillStyle = on ? "#0a1433" : "#fff"; g.fillText(boardMsg.sub, W / 2, 400, W - 60);
+    } else if (!inn) { // before the match
+      g.textAlign = "center"; g.fillStyle = "#fff"; g.font = font(900, 100); g.fillText("WELCOME", W / 2, 230);
+      if (c) { g.font = font(700, 36); g.fillStyle = "#fbbf24"; g.fillText(`${VENUES[c.venue][0]}, ${VENUES[c.venue][1]}`, W / 2, 340); }
+    } else {
+      const bt = S.teams[inn.bat], t = IPL[bt.key] || IPL.MI, bw = S.teams[inn.bowl], tb = IPL[bw.key] || IPL.MI;
+      // team block + big score
+      g.fillStyle = hex(t.c1); g.fillRect(28, 84, 190, 150); g.fillStyle = hex(t.c2); g.fillRect(28, 226, 190, 8);
+      g.fillStyle = t.fg; g.textAlign = "center"; g.font = font(900, 64); g.fillText(bt.key, 123, 156);
+      g.textAlign = "left"; g.fillStyle = "#fff"; g.font = font(900, 140); g.fillText(`${inn.runs}-${inn.wkts}`, 248, 160, 380);
+      // overs and match situation
+      const crr = inn.balls ? ((inn.runs / inn.balls) * 6).toFixed(2) : "0.00";
+      g.textAlign = "right"; g.fillStyle = "rgba(255,255,255,.6)"; g.font = font(800, 24); g.fillText("OVERS", 996, 102);
+      g.fillStyle = "#fff"; g.font = font(900, 76); g.fillText(`${oversStr(inn.balls)}/${S.cfg.overs}`, 996, 156);
+      g.font = font(700, 26); g.fillStyle = "#fbbf24";
+      if (S.target) {
+        const need = S.target - inn.runs, left = S.cfg.overs * 6 - inn.balls;
+        g.fillText(need > 0 ? `NEED ${need} OFF ${left} · CRR ${crr}` : "TARGET REACHED", 996, 214);
+      } else g.fillText(`CRR ${crr} · 1ST INNINGS`, 996, 214);
+      g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(28, 258, W - 56, 2);
+      // batters and bowler
+      const row = (b, y, on) => {
+        if (!b) return;
+        g.textAlign = "left"; g.font = font(on ? 800 : 600, 32); g.fillStyle = on ? "#fff" : "rgba(255,255,255,.7)";
+        g.fillText((on ? "▶ " : "    ") + b.name, 36, y, 380); g.textAlign = "right"; g.fillText(`${b.runs} (${b.balls})`, 530, y);
+      };
+      row(inn.batters[inn.striker], 300, true); row(inn.batters[inn.non], 350, false);
+      const bi = bowlerIdx(inn), f = inn.bowling[bi] || { balls: 0, runs: 0, wkts: 0 };
+      g.textAlign = "left"; g.font = font(700, 22); g.fillStyle = "rgba(255,255,255,.6)"; g.fillText("BOWLER", 590, 290);
+      g.font = font(800, 32); g.fillStyle = "#fff"; g.fillText(bowlerName(inn, bi), 590, 334, 260);
+      g.textAlign = "right"; g.fillStyle = "#fbbf24"; g.fillText(`${f.wkts}-${f.runs} (${oversStr(f.balls)})`, 996, 334);
+      g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(28, 386, W - 56, 2);
+      // this over
+      g.textAlign = "left"; g.font = font(700, 22); g.fillStyle = "rgba(255,255,255,.6)"; g.fillText("THIS OVER", 36, 440);
+      S.thisOver.forEach((b, i) => {
+        const x = 196 + i * 50, y = 440;
+        g.beginPath(); g.arc(x, y, 21, 0, Math.PI * 2);
+        g.fillStyle = b === "W" ? "#ef4444" : b === 4 ? "#2563eb" : b === 6 ? "#9333ea" : b === "Wd" ? "#475569" : "rgba(255,255,255,.18)"; g.fill();
+        g.fillStyle = "#fff"; g.textAlign = "center"; g.font = font(800, b === "Wd" ? 17 : 23); g.fillText(b === 0 ? "•" : String(b), x, y + 1);
+      });
+      // win probability
+      const wp = Math.round(clamp(winProbability(), 0.01, 0.99) * 100), bx = 600, bwid = 396;
+      g.textAlign = "left"; g.font = font(700, 22); g.fillStyle = "rgba(255,255,255,.6)"; g.fillText("WIN PROBABILITY", bx, 414);
+      g.fillStyle = hex(t.c1); g.fillRect(bx, 430, (bwid * wp) / 100, 18);
+      g.fillStyle = hex(tb.c1); g.fillRect(bx + (bwid * wp) / 100, 430, (bwid * (100 - wp)) / 100, 18);
+      g.font = font(800, 24); g.fillStyle = "#fff"; g.fillText(`${bt.key} ${wp}%`, bx, 474); g.textAlign = "right"; g.fillText(`${100 - wp}% ${bw.key}`, bx + bwid, 474);
+    }
+    g.fillStyle = g.createPattern(ledDots, "repeat"); g.fillRect(0, 0, W, H); // LED pixel grid
+    boardTex.needsUpdate = true;
   }
 
   // ---------------- pitch
@@ -1044,7 +1139,7 @@
   // Chance (0-1) that the batting side wins, from the score, wickets, balls left, the run rate so far, the current
   // batters' strike rates and past results between these teams.
   function winProbability() {
-    const inn = S.inn, W = S.cfg.wkts, total = S.cfg.overs * 6, left = total - inn.balls, wl = W - inn.wkts;
+    const inn = S.inn, W = S.cfg.wkts, total = S.cfg.overs * 6, left = Math.max(0, total - inn.balls), wl = Math.max(0, W - inn.wkts);
     const played = S.innings.filter(Boolean), r = played.reduce((s, x) => s + x.runs, 0), b = played.reduce((s, x) => s + x.balls, 0);
     const rate = (9 * 18 + (b ? (r / b) * 6 : 9) * (b / 6)) / (18 + b / 6); // T20 par of 9 an over, blended with this match
     const k = 3 / Math.max(1, W), res = (w) => (1 - Math.exp(-k * w)) / (1 - Math.exp(-k * W)); // wickets in hand as "resources"
@@ -1094,6 +1189,7 @@
       $("rbInfo").innerHTML = `<div class="eq">${esc(S.teams[inn.bat].name)}</div><div class="rates">CRR ${crr} · 1st innings</div>`;
     }
     updateStatus();
+    if (!(boardMsg && NOW < boardMsg.until)) drawBoard(); // the stadium screen follows the score
   }
   const lengthName = (L) => L < 2.8 ? "Yorker" : L < 4.3 ? "Full" : L < 7.2 ? "Good length" : "Short";
   const lineName = (x) => { const a = Math.abs(x); if (a < 0.2) return "On the stumps"; if (a > 1.0) return "Wide line"; return x > 0 ? "Leg side" : "Off side"; };
@@ -1136,7 +1232,7 @@
     fieldTeam.forEach((p) => set(p, fk, p === keeper));
   }
   function resetMatchState() {
-    S.token++; S.target = null; S.cur = 0; S.inn = null; S.innings = []; S.pendingBowl = null; S.netResult = null;
+    S.token++; S.target = null; S.cur = 0; S.inn = null; S.innings = []; S.pendingBowl = null; S.netResult = null; S.milestone = null; boardMsg = null;
     S.phase = "paused"; screen(null); hideMsg(); $("hud").classList.add("hidden");
   }
   function startOffline() {
@@ -1206,7 +1302,7 @@
     }
   }
   function toMenu() {
-    S.token++; S.phase = "menu"; S.inn = null; S.mode = null; resetField();
+    S.token++; S.phase = "menu"; S.inn = null; S.mode = null; S.milestone = null; boardMsg = null; resetField(); drawBoard();
     $("hud").classList.add("hidden"); hideMsg(); renderHome(); screen("scrHome");
   }
 
@@ -1587,12 +1683,14 @@
     if (o.out) {
       sfx.wicket(); crowdCheer = 0.7; S.celebrate = { t0: NOW };
       showFlash("CAUGHT!", "#ef4444", `${st.name} c ${fielderName(o.catcher)} ${st.runs} (${st.balls + 1})`);
+      boardEvent("OUT!", `${st.name} c ${fielderName(o.catcher)}`, "#ef4444");
     } else if (o.dropped) showFlash("DROPPED!", "#fb923c", `${capFirst(fielderName(o.dropper))} puts it down`);
     else if (o.runs === 6) {
       sfx.cheer(); crowdCheer = 1;
       const where = { rope: "Over the rope", crowd: "Into the crowd!", upper: "Into the top tier!", out: "OUT OF THE GROUND!" }[o.sixKind] || "";
       showFlash("SIX!", "#c084fc", `${where} · ${o.sixDist}m`);
-    } else if (o.runs === 4) { sfx.cheer(); crowdCheer = 0.8; showFlash("FOUR!", "#60a5fa", shotName(o)); }
+      boardEvent("SIX!", `${st.name} · ${o.sixDist}m`, "#9333ea");
+    } else if (o.runs === 4) { sfx.cheer(); crowdCheer = 0.8; showFlash("FOUR!", "#60a5fa", shotName(o)); boardEvent("FOUR!", shotName(o), "#2563eb"); }
     else if (o.runs === 0) showFlash(o.defend ? "DEFENDED" : "DOT BALL", "#f1f5f9", shotName(o));
     else showFlash(`${o.runs} RUN${o.runs > 1 ? "S" : ""}`, "#f8fafc", shotName(o));
   }
@@ -1607,7 +1705,7 @@
       S.swung = !!r.swung; S.shot = { name: r.shot.name, yawOff: r.shot.yawOff, start: NOW - SHOTS[r.shot.name].dur * SHOTS[r.shot.name].contact };
     }
     if (r.bowled) {
-      sfx.wicket();
+      sfx.wicket(); boardEvent("BOWLED!", r.sub, "#ef4444");
       S.stumpFx = { t0: NOW, vel: stumps.bails.map(() => V(rand(-1.5, 1.5), rand(2.5, 4), rand(2, 4))), tilt: stumps.parts.map(() => rand(0.4, 1.1)) };
     }
     deadBall(r.res, r.text, r.color, r.sub);
@@ -1627,6 +1725,7 @@
     // bowler's figures (recorded before the ball count moves on, so it's credited to this over's bowler)
     const fig = inn.bowling[bowlerIdx(inn)] || (inn.bowling[bowlerIdx(inn)] = { balls: 0, runs: 0, wkts: 0 });
     if (r.wide) fig.runs += 1; else { fig.balls++; if (r.out) fig.wkts++; else fig.runs += r.runs; }
+    const before = st.runs;
     if (r.wide) { inn.runs += 1; inn.extras += 1; S.thisOver.push("Wd"); }
     else {
       inn.balls++; st.balls++;
@@ -1638,16 +1737,44 @@
         if (r.runs % 2 === 1) swapStrike();
       }
     }
-    if (inn.wkts >= S.cfg.wkts || inn.balls >= S.cfg.overs * 6 || (S.target && inn.runs >= S.target)) {
-      updateHUD(); S.phase = "paused"; const tok = S.token; setTimeout(() => { if (tok === S.token) endInnings(); }, 700); return;
-    }
-    if (r.out) inn.striker = inn.next++;
-    if (!r.wide && inn.balls % 6 === 0) {
-      swapStrike(); S.overDone = true;
-      const overRuns = S.thisOver.reduce((s, b) => s + (typeof b === "number" ? b : b === "Wd" ? 1 : 0), 0);
-      showToast(`End of over ${inn.balls / 6} · ${overRuns} run${overRuns === 1 ? "" : "s"}`);
-    }
-    nextBall();
+    const proceed = () => {
+      if (inn.wkts >= S.cfg.wkts || inn.balls >= S.cfg.overs * 6 || (S.target && inn.runs >= S.target)) {
+        updateHUD(); S.phase = "paused"; const tok = S.token; setTimeout(() => { if (tok === S.token) endInnings(); }, 700); return;
+      }
+      if (r.out) inn.striker = inn.next++;
+      if (!r.wide && inn.balls % 6 === 0) {
+        swapStrike(); S.overDone = true;
+        const overRuns = S.thisOver.reduce((s, b) => s + (typeof b === "number" ? b : b === "Wd" ? 1 : 0), 0);
+        showToast(`End of over ${inn.balls / 6} · ${overRuns} run${overRuns === 1 ? "" : "s"}`);
+      }
+      nextBall();
+    };
+    // reached 50, 100, 150, 200...? the batter raises the bat before play goes on
+    const milestone = Math.floor(st.runs / 50) * 50;
+    if (!r.out && milestone >= 50 && Math.floor(before / 50) < Math.floor(st.runs / 50)) celebrateMilestone(st, milestone, proceed);
+    else proceed();
+  }
+  const MILESTONE_TITLE = { 50: "FIFTY!", 100: "HUNDRED!", 150: "150!", 200: "DOUBLE HUNDRED!", 300: "TRIPLE HUNDRED!" };
+  function celebrateMilestone(batter, runs, then) {
+    S.phase = "celebrate"; S.milestone = { batter, runs, start: NOW, end: NOW + 3.4, then };
+    resetField(); ball.visible = false; crowdCheer = 1; sfx.cheer();
+    updateHUD();
+    showFlash(MILESTONE_TITLE[runs] || `${runs}!`, "#fbbf24", `${batter.name} · ${runs} off ${batter.balls} balls`);
+    boardEvent(MILESTONE_TITLE[runs] || `${runs} UP`, `${batter.name} · ${runs} (${batter.balls})`, "#f59e0b");
+  }
+  // Raising the bat: face the crowd, bat held high in the top hand, the other arm punching the air.
+  function celebratePose() {
+    const U = batsman.userData, k = clamp((NOW - S.milestone.start) / 0.5, 0, 1);
+    batsman.position.set(0.5, 0, BAT_Z); batsman.rotation.y = lerp(Math.PI / 2, 0.15, k);
+    stand(batsman);
+    U.headG.rotation.set(-0.1 * k, 0, 0);
+    U.shL.rotation.set(-2.7 * k, 0, -0.35 * k);
+    U.hips.position.y = HIP_Y + Math.abs(Math.sin((NOW - S.milestone.start) * 3.2)) * 0.05;
+    batPivot.position.set(lerp(0.02, 0.27, k), lerp(0.78, 1.5, k), lerp(-0.42, -0.08, k)); // within arm's reach
+    batPivot.rotation.set(0, 0, lerp(-0.3, Math.PI - 0.15, k)); // swing round until the bat points to the sky
+    batBlade.rotation.set(0, -Math.PI / 2, 0);
+    batsman.updateMatrixWorld(true);
+    solveArm(U, "R", batBlade.localToWorld(GRIP_TOP.clone()), V(1, 0.2, 0.3));
   }
 
   // ================================================================ per-frame update
@@ -1727,6 +1854,9 @@
       }
       case "dead":
         if (NOW >= S.deadEnd) finishBall(S.result);
+        break;
+      case "celebrate":
+        if (NOW >= S.milestone.end) { const then = S.milestone.then; S.milestone = null; then(); }
         break;
     }
 
@@ -1846,6 +1976,7 @@
     return hold < 0.7 ? prev : lerpPose(prev, STANCE, smooth(clamp((hold - 0.7) / 0.6, 0, 1)));
   }
   function batsmanPose(dt) {
+    if (S.phase === "celebrate" && S.milestone) return celebratePose();
     let p;
     if (S.shot) p = shotPose(S.shot);
     else {
@@ -1922,6 +2053,8 @@
       pos = V(lerp(0, b.x, 0.5), 0, lerp(ZH, b.z, 0.5)).addScaledVector(H.dirV, -24);
       pos.y = 20 + Math.min(18, Math.hypot(H.P1.x - H.P0.x, H.P1.z - H.P0.z) * 0.15);
       look = b.clone(); speed = 2.5;
+    } else if (S.phase === "celebrate") { // close-up of the batter raising the bat
+      pos = V(-0.6, 1.9, -7.8); look = V(0.5, 1.45, -0.95); speed = 3;
     } else if (S.phase === "menu" || S.phase === "paused") {
       const a = NOW * 0.07; pos = V(CENTER.x + Math.sin(a) * 72, 28, CENTER.z + Math.cos(a) * 72); look = CENTER.clone(); speed = 1.5;
     } else { pos = DEF_POS; look = DEF_LOOK; }
@@ -2195,6 +2328,7 @@
     crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
     cloudGroup.rotation.y += dt * 0.004; // clouds drift across the sky
     updatePrecip(dt);
+    if (boardMsg && NOW < boardMsg.until + 0.3 && NOW - boardDrawnAt > 0.2) drawBoard(); // flashing, then back to the score
     renderer.render(scene, camera);
   }
   loop();
