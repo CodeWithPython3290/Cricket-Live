@@ -567,6 +567,18 @@ def load_template(file_name):
     return (TEMPLATE_DIR / file_name).read_text(encoding="utf-8")
 
 
+ENGINE_TAG = '<script src="three.min.js"></script>'
+
+
+@st.cache_data(show_spinner=False)
+def bundle_engine(page):
+    """Paste the bundled 3D engine (templates/three.min.js) into a page that uses it, so it runs offline."""
+    engine = TEMPLATE_DIR / "three.min.js"
+    if ENGINE_TAG not in page or not engine.exists():
+        return page
+    return page.replace(ENGINE_TAG, "<script>" + engine.read_text(encoding="utf-8") + "</script>", 1)
+
+
 # The cricket game's Play button is a small custom component (templates/index.html). Besides opening the
 # game, it relays the game's online requests (sign-in, rooms, each ball) to multiplayer.py, which keeps
 # everything in cricket_multiplayer.db - so players anywhere can meet in the same room.
@@ -613,7 +625,7 @@ def templates_gallery():
                 if t.get("online"):
                     cricket_launcher()
                 else:
-                    open_blank_button(load_template(t["file"]), "▶  Play in new tab")
+                    open_blank_button(bundle_engine(load_template(t["file"])), "▶  Play in new tab")
                 st.button("View code", key=f"inspect_tpl_{i}", on_click=inspect_template, args=(name,), width="stretch")
 
 
@@ -657,8 +669,9 @@ def html_viewer_tab():
                     f'Title: {html.escape(title.group(1).strip()) if title else "(none)"}</p>',
                     unsafe_allow_html=True,
                 )
-                open_blank_button(content)
-                st.download_button("Download file", content, file_name=name, mime="text/html", width="stretch")
+                runnable = bundle_engine(content)  # templates carry their 3D engine inline, so they run offline
+                open_blank_button(runnable)
+                st.download_button("Download file", runnable, file_name=name, mime="text/html", width="stretch")
                 height = st.slider("Preview height", 400, 1600, 780, step=40)
 
     with right:
@@ -668,7 +681,7 @@ def html_viewer_tab():
             if view == "Source":
                 st.code(content, language="html", line_numbers=True, height=height)
             else:
-                components.html(content, height=height, scrolling=True)
+                components.html(bundle_engine(content), height=height, scrolling=True)
         else:
             st.markdown(
                 f'<div class="empty" style="height:{height}px;display:flex;align-items:center;'

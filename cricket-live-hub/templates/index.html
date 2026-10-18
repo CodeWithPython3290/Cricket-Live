@@ -9,8 +9,7 @@
 <head>
 <meta charset="utf-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap');
-  html, body { margin: 0; background: transparent; font-family: Inter, system-ui, sans-serif; overflow: hidden; }
+  html, body { margin: 0; background: transparent; font-family: Inter, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
   button { display: block; width: 100%; height: 44px; border: 0; border-radius: 10px; cursor: pointer; font: 700 14px Inter, sans-serif;
     color: #065f46; letter-spacing: .01em; background: #fff;
     transition: background .12s; }
@@ -67,8 +66,15 @@
     const w = window.open("about:blank", "_blank");
     if (!w) { showError("Your browser blocked the new tab. Allow this site to open tabs and try again."); return; }
     try {
-      const html = await (await fetch("cricket_league_3d.html", { cache: "no-store" })).text();
-      w.document.open(); w.document.write(html); w.document.close();
+      // The game and its 3D engine both come from this app's own folder, then the engine is pasted into the page,
+      // so the game starts without an internet connection.
+      const [html, engine] = await Promise.all([
+        fetch("cricket_league_3d.html", { cache: "no-store" }).then((r) => r.text()),
+        fetch("three.min.js").then((r) => r.text()),
+      ]);
+      // (written as <\/script> so this page's own <script> block isn't ended early)
+      const page = html.replace('<script src="three.min.js"><\/script>', () => "<script>" + engine + "<\/script>");
+      w.document.open(); w.document.write(page); w.document.close();
     } catch (err) {
       w.close(); showError("Couldn't load the game. Try again.");
     }

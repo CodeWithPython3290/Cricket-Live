@@ -20,7 +20,7 @@ streamlit run streamlit_app.py
 
 ## 3D Cricket League
 
-A cartoon cricket game. Pick an IPL team, choose how many overs and wickets to play, then take on the CPU (Easy, Medium or Hard) or a friend online.
+A cartoon cricket game. It runs without an internet connection: its 3D engine (three.js r149) is bundled as `templates/three.min.js`, so keep that file next to the game and upload it with the rest of the `templates` folder. Pick an IPL team, choose how many overs and wickets to play, then take on the CPU (Easy, Medium or Hard) or a friend online.
 
 | | Batting | Bowling |
 |---|---|---|

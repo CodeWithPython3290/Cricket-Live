@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cricket League 3D</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- optional web font: loads without blocking, and the game uses the system font when offline -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
   :root { --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; --accent: #10b981; --accent-d: #059669; --live: #ef4444;
     --hud: rgba(15, 23, 42, .82); }
@@ -260,7 +260,10 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<!-- 3D engine (three.js r149), bundled with the game in templates/three.min.js so no internet connection is needed.
+     The Play button and the HTML Viewer paste it straight in here; opened as a file, it loads from the same folder. -->
+<script src="three.min.js"></script>
+<script>if (!window.THREE) document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"><\/script>'); // last resort</script>
 <script>
 (function () {
   "use strict";
@@ -268,7 +271,7 @@
 
   if (!window.THREE) {
     $("scrHome").innerHTML = '<div class="msg-title">Couldn’t load the 3D engine</div>' +
-      '<p class="msg-body">This game needs an internet connection to load. Check your connection and reload.</p>';
+      '<p class="msg-body">The 3D engine file (three.min.js) is missing. Keep it next to cricket_league_3d.html in the templates folder.</p>';
     return;
   }
 
