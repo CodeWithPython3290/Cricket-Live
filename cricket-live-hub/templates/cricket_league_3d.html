@@ -398,7 +398,12 @@
   // sway, and on big moments makes them jump with their arms in the air.
   const TIER = { r0: 72, depth: 1.15, rise: 0.55, rows: 14, y0: 0.9 };
   TIER.rEnd = TIER.r0 + TIER.rows * TIER.depth; TIER.yEnd = TIER.y0 + (TIER.rows - 1) * TIER.rise;
-  const UPPER = { r0: 90, depth: 1.6, rise: 1.05, rows: 22, y0: 9.6 };
+  const UPPER = { r0: 90, depth: 1.6, rise: 1.05, rows: 22, y0: 12.4 }; // raised to make room for the hospitality boxes
+  // Layout of the bowl: stairway aisles, the two big screens on top of the end stands, and the members' pavilion.
+  const AISLE_STEP = (Math.PI * 2) / 36, SCREEN_A = [0.2, Math.PI + 0.2], PAV = { a0: 1.2, a1: 1.95 };
+  const ROOF_GAPS = [...SCREEN_A.map((a) => [a - 0.17, a + 0.17]), [PAV.a0, PAV.a1]].sort((p, q) => p[0] - q[0]);
+  const ROOF_ARCS = ROOF_GAPS.map((g, i) => { const next = ROOF_GAPS[(i + 1) % ROOF_GAPS.length][0] + (i === ROOF_GAPS.length - 1 ? Math.PI * 2 : 0); return [g[1], next - g[1]]; });
+  const inRoofGap = (a) => ROOF_GAPS.some(([s, e]) => a > s && a < e);
   UPPER.r1 = UPPER.r0 + UPPER.rows * UPPER.depth; UPPER.yTop = UPPER.y0 + (UPPER.rows - 1) * UPPER.rise; UPPER.y1 = UPPER.yTop + 3;
   // Height of the seating at a distance r from the centre of the ground (0 = grass, -1 = beyond the stadium).
   function standHeight(r) {
@@ -418,26 +423,123 @@
     }
   }
   steps.push(new THREE.Vector2(UPPER.r1, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, 0));
-  const tiers = new THREE.Mesh(new THREE.LatheGeometry(steps, 160), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.DoubleSide }));
+  // concrete with lighter stairway aisles (and a yellow handrail line) running up through the seating
+  const tierTex = canvasTex(128, 32, (g, w, h) => {
+    g.fillStyle = "#8b95a5"; g.fillRect(0, 0, w, h); g.fillStyle = "#c6ccd5"; g.fillRect(0, 0, 11, h); g.fillStyle = "#e3b341"; g.fillRect(5, 0, 1.5, h);
+  });
+  tierTex.wrapS = THREE.RepeatWrapping; tierTex.repeat.set(36, 1);
+  const tiers = new THREE.Mesh(new THREE.LatheGeometry(steps, 216), new THREE.MeshLambertMaterial({ map: tierTex, side: THREE.DoubleSide }));
   tiers.position.copy(CENTER); tiers.receiveShadow = true; scene.add(tiers);
+  // railings along the front of each tier
+  for (const [r, y] of [[TIER.r0 - 0.05, TIER.y0 + 0.95], [UPPER.r0 - 0.1, UPPER.y0 + 1.0]]) {
+    const rail = new THREE.Mesh(new THREE.TorusGeometry(r, 0.045, 4, 180), M(0x334155)); rail.rotation.x = Math.PI / 2; rail.position.set(CENTER.x, y, CENTER.z); scene.add(rail);
+  }
+  // hospitality boxes: a band of glass corporate boxes (warm lights inside) between the two tiers
+  const boxTex = canvasTex(512, 64, (g, w, h) => {
+    g.fillStyle = "#1f2937"; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 8; i++) {
+      const x = i * 64 + 4, gr = g.createLinearGradient(0, 6, 0, h - 6);
+      gr.addColorStop(0, "#2c4a6e"); gr.addColorStop(1, "#11233b"); g.fillStyle = gr; g.fillRect(x, 6, 56, h - 14);
+      g.fillStyle = "rgba(255,214,150,0.55)"; for (let k = 0; k < 3; k++) if (Math.random() < 0.7) g.fillRect(x + 6 + k * 17, 22 + Math.random() * 8, 10, 14);
+      g.fillStyle = "rgba(255,255,255,0.25)"; g.fillRect(x + 27, 6, 2, h - 14); // mullion
+    }
+    g.fillStyle = "#cbd5e1"; g.fillRect(0, h - 8, w, 8); // balcony edge
+  });
+  boxTex.wrapS = THREE.RepeatWrapping; boxTex.repeat.set(30, 1);
+  const boxes = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r0 - 0.06, UPPER.r0 - 0.06, UPPER.y0 - TIER.yEnd - 0.2, 180, 1, true),
+    new THREE.MeshLambertMaterial({ map: boxTex, side: THREE.BackSide, emissive: 0x262626 }));
+  boxes.position.set(CENTER.x, (UPPER.y0 + TIER.yEnd + 0.2) / 2, CENTER.z); scene.add(boxes);
 
   // roof: a canopy sloping up from the back wall, a dark fascia along its front edge, and columns holding it up
   const ROOF = { inner: UPPER.r1 - 14, outer: UPPER.r1 + 1.5, yIn: UPPER.y1 + 8, yOut: UPPER.y1 + 4 };
-  const canopy = new THREE.Mesh(new THREE.CylinderGeometry(ROOF.inner, ROOF.outer, ROOF.yIn - ROOF.yOut, 120, 1, true),
-    new THREE.MeshLambertMaterial({ color: 0xe5e9ee, emissive: 0x4a525c, side: THREE.DoubleSide })); // emissive: stays light grey underneath
-  canopy.position.set(CENTER.x, (ROOF.yIn + ROOF.yOut) / 2, CENTER.z); scene.add(canopy);
-  const fascia = new THREE.Mesh(new THREE.CylinderGeometry(ROOF.inner, ROOF.inner, 1.6, 120, 1, true), new THREE.MeshLambertMaterial({ color: 0x1e293b, side: THREE.DoubleSide }));
-  fascia.position.set(CENTER.x, ROOF.yIn, CENTER.z); scene.add(fascia);
-  const COLS = 40, columns = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.45, 0.6, 1, 6), M(0x9aa4b1), COLS);
+  // roof sections (cut away over the big screens and the pavilion), each with a dark fascia and steel ribs
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xe5e9ee, emissive: 0x4a525c, side: THREE.DoubleSide }); // emissive: stays light grey underneath
+  const fasciaMat = new THREE.MeshLambertMaterial({ color: 0x1e293b, side: THREE.DoubleSide });
+  for (const [start, len] of ROOF_ARCS) {
+    const segs = Math.max(8, Math.round(len * 24));
+    const canopy = new THREE.Mesh(new THREE.CylinderGeometry(ROOF.inner, ROOF.outer, ROOF.yIn - ROOF.yOut, segs, 1, true, start, len), roofMat);
+    canopy.position.set(CENTER.x, (ROOF.yIn + ROOF.yOut) / 2, CENTER.z); scene.add(canopy);
+    const fascia = new THREE.Mesh(new THREE.CylinderGeometry(ROOF.inner, ROOF.inner, 1.6, segs, 1, true, start, len), fasciaMat);
+    fascia.position.set(CENTER.x, ROOF.yIn, CENTER.z); scene.add(fascia);
+  }
+  const RIBS = 96, ribs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.35, 0.5, 1), M(0x64748b), RIBS);
+  const COLS = 48, columns = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.45, 0.6, 1, 6), M(0x9aa4b1), COLS);
   (() => {
-    const dm = new THREE.Object3D();
+    const dm = new THREE.Object3D(), run = ROOF.outer - ROOF.inner, drop = ROOF.yIn - ROOF.yOut, len = Math.hypot(run, drop);
+    let nr = 0, nc = 0;
+    for (let i = 0; i < RIBS; i++) {
+      const a = (i / RIBS) * Math.PI * 2, r = (ROOF.inner + ROOF.outer) / 2;
+      if (inRoofGap(a)) continue;
+      dm.position.set(CENTER.x + Math.sin(a) * r, (ROOF.yIn + ROOF.yOut) / 2 + 0.35, CENTER.z + Math.cos(a) * r);
+      dm.rotation.set(Math.atan2(drop, run), a, 0, "YXZ"); dm.scale.set(1, 1, len); dm.updateMatrix();
+      ribs.setMatrixAt(nr++, dm.matrix);
+    }
+    dm.rotation.set(0, 0, 0);
     for (let i = 0; i < COLS; i++) {
       const a = (i / COLS) * Math.PI * 2, r = UPPER.r1 + 1;
+      if (inRoofGap(a)) continue;
       dm.position.set(CENTER.x + Math.sin(a) * r, ROOF.yOut / 2, CENTER.z + Math.cos(a) * r); dm.scale.set(1, ROOF.yOut, 1); dm.updateMatrix();
-      columns.setMatrixAt(i, dm.matrix);
+      columns.setMatrixAt(nc++, dm.matrix);
+    }
+    ribs.count = nr; columns.count = nc;
+  })();
+  scene.add(ribs, columns);
+
+  // members' pavilion: a multi-storey glass building with a swooping wave roof, in place of one section of the upper tier
+  (() => {
+    const len = PAV.a1 - PAV.a0, rf = UPPER.r0 + 0.8, top = UPPER.y0 + 17;
+    const glassTex = canvasTex(1024, 256, (g, w, h) => {
+      g.fillStyle = "#e2e8f0"; g.fillRect(0, 0, w, h);
+      for (let f = 0; f < 4; f++) {
+        const y = 10 + f * 61, gr = g.createLinearGradient(0, y, 0, y + 46);
+        gr.addColorStop(0, "#3d6a96"); gr.addColorStop(1, "#16304d"); g.fillStyle = gr; g.fillRect(0, y, w, 46);
+        g.fillStyle = "rgba(255,220,160,0.5)"; for (let x = 8; x < w; x += 40) if (Math.random() < 0.45) g.fillRect(x, y + 14, 22, 26);
+        g.fillStyle = "rgba(255,255,255,0.35)"; for (let x = 0; x < w; x += 40) g.fillRect(x, y, 2, 46); // glazing bars
+      }
+    });
+    glassTex.wrapS = THREE.RepeatWrapping; glassTex.repeat.set(4, 1);
+    const facade = new THREE.Mesh(new THREE.CylinderGeometry(rf, rf, top - TIER.yEnd, 48, 1, true, PAV.a0, len),
+      new THREE.MeshLambertMaterial({ map: glassTex, side: THREE.DoubleSide, emissive: 0x1a2230 }));
+    facade.position.set(CENTER.x, (top + TIER.yEnd) / 2, CENTER.z); scene.add(facade);
+    const wave = new THREE.SplineCurve([[rf - 4, top - 0.5], [rf + 3, top + 5], [rf + 14, top + 7.5], [UPPER.r1 - 2, top + 4], [UPPER.r1 + 2, top - 1]]
+      .map(([r, y]) => new THREE.Vector2(r, y))).getPoints(24);
+    const roof = new THREE.Mesh(new THREE.LatheGeometry(wave, 48, PAV.a0, len), new THREE.MeshLambertMaterial({ color: 0xf8fafc, emissive: 0x3f4650, side: THREE.DoubleSide }));
+    roof.position.copy(CENTER); scene.add(roof);
+    const side = new THREE.MeshLambertMaterial({ color: 0xcbd5e1, side: THREE.DoubleSide }); // end walls
+    for (const a of [PAV.a0, PAV.a1]) {
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(UPPER.r1 + 2 - rf, top - TIER.yEnd + 4), side);
+      wall.position.set(CENTER.x + Math.sin(a) * (rf + UPPER.r1 + 2) / 2, (top + TIER.yEnd + 4) / 2, CENTER.z + Math.cos(a) * (rf + UPPER.r1 + 2) / 2);
+      wall.rotation.y = a + Math.PI / 2; scene.add(wall);
     }
   })();
-  scene.add(columns);
+
+  // team flags along the roof edge, waving in the wind
+  const flags = [];
+  (() => {
+    const pole = new THREE.CylinderGeometry(0.06, 0.06, 3.2, 5), cloth = new THREE.PlaneGeometry(1.8, 1.1);
+    let n = 0;
+    for (let a = 0.1; a < Math.PI * 2; a += 0.21) {
+      if (inRoofGap(a)) continue;
+      const key = TEAM_KEYS[n++ % TEAM_KEYS.length], t = IPL[key], r = ROOF.inner + 0.6;
+      const g = new THREE.Group(); g.position.set(CENTER.x + Math.sin(a) * r, ROOF.yIn + 0.8, CENTER.z + Math.cos(a) * r);
+      g.add(new THREE.Mesh(pole, M(0xd1d5db))); g.children[0].position.y = 1.6;
+      const tex = canvasTex(64, 40, (c, w, h) => { c.fillStyle = hex(t.c1); c.fillRect(0, 0, w, h); c.fillStyle = hex(t.c2); c.fillRect(0, h * 0.7, w, h * 0.3); });
+      const f = new THREE.Mesh(cloth, new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide })); f.position.set(0.9, 2.65, 0);
+      const swing = new THREE.Group(); swing.add(f); g.add(swing); g.rotation.y = a; swing.userData.base = 0;
+      scene.add(g); flags.push(swing);
+    }
+  })();
+
+  // dugouts on either side of the ground, just inside the advertising boards
+  for (const a of [Math.PI / 2 + 0.25, -Math.PI / 2 - 0.25]) {
+    const r = BOUNDARY + 1.8, g = new THREE.Group();
+    g.position.set(CENTER.x + Math.sin(a) * r, 0, CENTER.z + Math.cos(a) * r); g.lookAt(CENTER.x, 0, CENTER.z);
+    const shell = new THREE.Mesh(new THREE.BoxGeometry(7, 2.3, 0.15), M(0x1e293b)); shell.position.set(0, 1.15, -0.9);
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.45, 0.6), M(0x334155)); bench.position.set(0, 0.25, -0.5);
+    const cover = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.08, 2.1), new THREE.MeshLambertMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.55 }));
+    cover.position.set(0, 2.3, 0); cover.rotation.x = -0.08;
+    g.add(shell, bench, cover); scene.add(g);
+  }
 
   // floodlights: tapered pylons with a frame of lamps that glow when the light is poor
   const lampOn = new THREE.MeshBasicMaterial({ color: 0xfff7d6 }), lampOff = new THREE.MeshBasicMaterial({ color: 0x8b95a3 });
@@ -537,6 +639,10 @@
       for (let i = 0; i < n; i++) {
         const a = ((i + (row % 2) * 0.5) / n) * Math.PI * 2, x = Math.sin(a) * rr;
         if (Math.abs(x) < 10 && Math.abs(Math.cos(a)) > 0.9 && tier === TIER) continue; // behind the sightscreens
+        const step = (a / AISLE_STEP) % 1;
+        if (step < 0.1 || step > 0.985) continue; // stairway aisle
+        if (tier === UPPER && a > PAV.a0 - 0.01 && a < PAV.a1 + 0.01) continue; // members' pavilion
+        if (tier === UPPER && rr > UPPER.r1 - 9 && SCREEN_A.some((s) => Math.abs(a - s) < 0.17)) continue; // under the big screens
         const k = Math.floor((((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI) * SECTORS) % SECTORS;
         sectors[k].push({ x: CENTER.x + x, y, z: CENTER.z + Math.cos(a) * rr, a, seat: seatCols[k % seatCols.length] });
       }
@@ -690,27 +796,31 @@
     if (typeof drawBoard === "function" && boardTex) drawBoard();
   }
 
-  // ---------------- giant stadium screen (IPL style)
-  // A big LED screen standing at the far end, beside the sightscreen, in view of the batting camera. It shows the live
-  // scorecard and flashes up big moments (four, six, wicket, milestones). Redrawn only when something changes.
-  const BOARD = { w: 18, h: 9, a: 0.36 };
+  // ---------------- giant stadium screens (IPL style)
+  // Two big LED screens on top of the end stands, on steel frames, tilted down towards the pitch (the roof is cut away
+  // around them). They show the live scorecard and flash up big moments (four, six, wicket, milestones).
+  const BOARD = { w: 30, h: 15 };
   const boardCanvas = document.createElement("canvas"); boardCanvas.width = 1024; boardCanvas.height = 512;
   const bctx = boardCanvas.getContext("2d");
   const boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.anisotropy = 4;
-  (() => {
-    const r = BOUNDARY + 5.3, g = new THREE.Group(); // on the grass between the advertising boards and the stands
-    g.position.set(CENTER.x + Math.sin(BOARD.a) * r, 0.7 + BOARD.h / 2, CENTER.z + Math.cos(BOARD.a) * r);
-    g.lookAt(CENTER.x, g.position.y, CENTER.z); // face the ground
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(BOARD.w + 1.2, BOARD.h + 1.2, 0.9), M(0x111827)); frame.position.z = -0.5;
+  const boardSpots = [];
+  for (const a of SCREEN_A) {
+    const r = UPPER.r1 - 4, g = new THREE.Group();
+    g.position.set(CENTER.x + Math.sin(a) * r, UPPER.yTop + 2 + BOARD.h / 2, CENTER.z + Math.cos(a) * r);
+    g.lookAt(CENTER.x, 0, CENTER.z); // tilted down towards the pitch
+    const steel = M(0x374151);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(BOARD.w + 1.4, BOARD.h + 1.4, 1), M(0x111827)); frame.position.z = -0.6;
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(BOARD.w, BOARD.h), new THREE.MeshBasicMaterial({ map: boardTex, fog: false }));
     g.add(frame, screen);
-    for (const sx of [-BOARD.w * 0.35, BOARD.w * 0.35]) { // support posts
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.4, 0.5), M(0x374151)); post.position.set(sx, -BOARD.h / 2 - 0.5, -0.5); g.add(post);
+    for (const sx of [-BOARD.w * 0.38, 0, BOARD.w * 0.38]) { // legs and diagonal braces down onto the stand
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.7, 10, 0.7), steel); leg.position.set(sx, -BOARD.h / 2 - 5, -1.2); g.add(leg);
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.35, 11, 0.35), steel); brace.position.set(sx, -BOARD.h / 2 - 4, -3.2); brace.rotation.x = -0.38; g.add(brace);
     }
-    scene.add(g);
-  })();
+    const truss = new THREE.Mesh(new THREE.BoxGeometry(BOARD.w + 1, 0.5, 0.5), steel); truss.position.set(0, -BOARD.h / 2 - 1.5, -1.2); g.add(truss);
+    scene.add(g); boardSpots.push(g.position.clone());
+  }
   let boardMsg = null, boardDrawnAt = 0;
-  function boardEvent(title, sub, color) { boardMsg = { title, sub: sub || "", color, until: NOW + 3.2 }; drawBoard(); }
+  function boardEvent(title, sub, color, secs) { boardMsg = { title, sub: sub || "", color, until: NOW + (secs || 3.2) }; drawBoard(); }
   const ledDots = (() => { // dark gaps between LED pixels
     const c = document.createElement("canvas"); c.width = c.height = 4; const g = c.getContext("2d");
     g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(3, 0, 1, 4); g.fillRect(0, 3, 4, 1); return c;
@@ -1756,11 +1866,11 @@
   }
   const MILESTONE_TITLE = { 50: "FIFTY!", 100: "HUNDRED!", 150: "150!", 200: "DOUBLE HUNDRED!", 300: "TRIPLE HUNDRED!" };
   function celebrateMilestone(batter, runs, then) {
-    S.phase = "celebrate"; S.milestone = { batter, runs, start: NOW, end: NOW + 3.4, then };
+    S.phase = "celebrate"; S.milestone = { batter, runs, start: NOW, end: NOW + 4.4, then };
     resetField(); ball.visible = false; crowdCheer = 1; sfx.cheer();
     updateHUD();
     showFlash(MILESTONE_TITLE[runs] || `${runs}!`, "#fbbf24", `${batter.name} · ${runs} off ${batter.balls} balls`);
-    boardEvent(MILESTONE_TITLE[runs] || `${runs} UP`, `${batter.name} · ${runs} (${batter.balls})`, "#f59e0b");
+    boardEvent(MILESTONE_TITLE[runs] || `${runs} UP`, `${batter.name} · ${runs} (${batter.balls})`, "#f59e0b", 4.6);
   }
   // Raising the bat: face the crowd, bat held high in the top hand, the other arm punching the air.
   function celebratePose() {
@@ -2053,6 +2163,9 @@
       pos = V(lerp(0, b.x, 0.5), 0, lerp(ZH, b.z, 0.5)).addScaledVector(H.dirV, -24);
       pos.y = 20 + Math.min(18, Math.hypot(H.P1.x - H.P0.x, H.P1.z - H.P0.z) * 0.15);
       look = b.clone(); speed = 2.5;
+    } else if (S.phase === "celebrate" && S.milestone && NOW - S.milestone.start > 2.2) { // then cut to the big screen
+      const s = boardSpots[0];
+      pos = V(lerp(CENTER.x, s.x, 0.45), s.y * 0.55, lerp(CENTER.z, s.z, 0.45)); look = s.clone(); speed = 30;
     } else if (S.phase === "celebrate") { // close-up of the batter raising the bat
       pos = V(-0.6, 1.9, -7.8); look = V(0.5, 1.45, -0.95); speed = 3;
     } else if (S.phase === "menu" || S.phase === "paused") {
@@ -2327,6 +2440,7 @@
     crowdCheer = Math.max(0, crowdCheer - dt * 0.3); // the crowd settles down a few seconds after a cheer
     crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
     cloudGroup.rotation.y += dt * 0.004; // clouds drift across the sky
+    flags.forEach((f, i) => { f.rotation.y = Math.sin(NOW * 2.5 + i * 1.7) * 0.4; });
     updatePrecip(dt);
     if (boardMsg && NOW < boardMsg.until + 0.3 && NOW - boardDrawnAt > 0.2) drawBoard(); // flashing, then back to the score
     renderer.render(scene, camera);
