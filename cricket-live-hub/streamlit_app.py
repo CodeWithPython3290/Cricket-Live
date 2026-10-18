@@ -554,6 +554,37 @@ def open_blank_button(content, label="Open in about:blank  ↗"):
     )
 
 
+GAME_SIZE = (1600, 900)  # the browser-tab size a 3D game is laid out for in the preview
+GAME_PREVIEW = """
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1220; }
+  #game { position: absolute; border: 0; display: block; transform-origin: 0 0; }
+</style>
+<iframe id="game" allow="autoplay; fullscreen"></iframe>
+<script>
+  // The game sees a full-size browser tab, exactly as when it's opened on its own, and is scaled down to fit this box.
+  const f = document.getElementById("game"), W = __W__, H = __H__;
+  f.style.width = W + "px"; f.style.height = H + "px";
+  f.srcdoc = __PAGE__;
+  function fit() {
+    const s = Math.min(innerWidth / W, innerHeight / H);
+    f.style.transform = "scale(" + s + ")";
+    f.style.left = (innerWidth - W * s) / 2 + "px"; f.style.top = (innerHeight - H * s) / 2 + "px";
+    try { if (f.contentWindow.__setViewScale) f.contentWindow.__setViewScale(s); } catch (e) {} // draw only the pixels shown
+  }
+  f.addEventListener("load", fit); addEventListener("resize", fit); fit();
+</script>
+"""
+
+
+def game_preview(page, height):
+    """Preview a 3D game so it looks and plays like it does in its own tab, rather than squeezed into the box."""
+    payload = json.dumps(page).replace("</", "<\\/")
+    wrapper = (GAME_PREVIEW.replace("__W__", str(GAME_SIZE[0])).replace("__H__", str(GAME_SIZE[1]))
+               .replace("__PAGE__", payload))
+    components.html(wrapper, height=height)
+
+
 def page_head(eyebrow, title, subtitle, meta):
     st.markdown(
         f'<div class="page-head"><div><div class="eyebrow">{eyebrow}</div><h2>{title}</h2>'
@@ -672,7 +703,8 @@ def html_viewer_tab():
                 runnable = bundle_engine(content)  # templates carry their 3D engine inline, so they run offline
                 open_blank_button(runnable)
                 st.download_button("Download file", runnable, file_name=name, mime="text/html", width="stretch")
-                height = st.slider("Preview height", 400, 1600, 780, step=40)
+                # a 3D game is shown at 16:9, which fits the preview column at about 560 px
+                height = st.slider("Preview height", 400, 1600, 560 if ENGINE_TAG in content else 780, step=40)
 
     with right:
         if content.strip():
@@ -680,6 +712,8 @@ def html_viewer_tab():
                                         label_visibility="collapsed")
             if view == "Source":
                 st.code(content, language="html", line_numbers=True, height=height)
+            elif ENGINE_TAG in content:  # 3D games
+                game_preview(bundle_engine(content), height)
             else:
                 components.html(bundle_engine(content), height=height, scrolling=True)
         else:

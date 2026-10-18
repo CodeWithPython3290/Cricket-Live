@@ -93,6 +93,11 @@
   .scorecard .r:last-child { border: 0; }
   .scorecard .grow { flex: 1; } .scorecard small { color: var(--muted); }
 
+  /* shown in the app's preview when the keyboard is focused somewhere else on the page */
+  #kbHint { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 30; display: none; pointer-events: none;
+    background: rgba(10,20,51,.88); color: #fff; font: 700 15px Inter, system-ui, sans-serif; padding: 9px 16px; border-radius: 999px; }
+  #kbHint.show { display: block; }
+
   /* ---------- in-game HUD ---------- */
   /* broadcast-style score ribbon along the bottom edge (IPL TV layout):
      team | score + overs | batters | bowler | this over | chase equation */
@@ -172,6 +177,7 @@
 
 <!-- ======================= HUD ======================= -->
 <div id="hud" class="hidden">
+  <div id="kbHint">⌨️ Click the game to use the keyboard</div>
   <div id="ribbon">
     <div class="rb-team" id="rbTeam"></div>
     <div class="rb-score"><span id="rbScore">0-0</span><span id="rbOvers"></span></div>
@@ -205,6 +211,8 @@
     <div class="head"><button class="back" data-back="scrHome">←</button><h2>Play vs CPU</h2></div>
     <div class="label">Your team</div>
     <div class="teams" id="pick1"></div>
+    <div class="label">Opponent <span id="oppNote" class="muted small"></span></div>
+    <div class="teams" id="pick2"></div>
     <div class="grid2">
       <div><div class="label">Overs</div><div class="chips" id="oversChips"></div></div>
       <div><div class="label">Wickets</div><div class="chips" id="wktChips"></div></div>
@@ -340,14 +348,23 @@
 
   // ================================================================ renderer + scene
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // In the app's preview the game runs at a full browser-tab size and is scaled down to fit the box (see game_preview
+  // in streamlit_app.py). __viewScale is that scale, so only the pixels that are actually shown get drawn.
+  const pixelRatio = () => Math.min(window.devicePixelRatio, 2) * Math.min(1, window.__viewScale || 1);
+  renderer.setPixelRatio(pixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
+  window.__setViewScale = (s) => { window.__viewScale = s; renderer.setPixelRatio(pixelRatio()); renderer.setSize(window.innerWidth, window.innerHeight); };
+  const EMBEDDED = (() => { try { return window.top !== window; } catch (e) { return true; } })();
+  let onScreen = true; // not drawn while scrolled out of view or on the app's other tab
+  if (EMBEDDED && "IntersectionObserver" in window) new IntersectionObserver((es) => { onScreen = es[es.length - 1].isIntersecting; }).observe(renderer.domElement);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 700);
+  // near plane at 0.5 m (nothing gets closer to the camera): 5x the depth precision of 0.1, so surfaces that sit close
+  // together far away in the stadium don't flicker through each other
+  const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.5, 700);
   camera.position.set(60, 30, 40);
 
   function canvasTex(w, h, draw) {
@@ -446,7 +463,7 @@
     g.fillStyle = "#cbd5e1"; g.fillRect(0, h - 8, w, 8); // balcony edge
   });
   boxTex.wrapS = THREE.RepeatWrapping; boxTex.repeat.set(30, 1);
-  const boxes = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r0 - 0.06, UPPER.r0 - 0.06, UPPER.y0 - TIER.yEnd - 0.2, 180, 1, true),
+  const boxes = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r0 - 0.3, UPPER.r0 - 0.3, UPPER.y0 - TIER.yEnd - 0.2, 180, 1, true),
     new THREE.MeshLambertMaterial({ map: boxTex, side: THREE.BackSide, emissive: 0x262626 }));
   boxes.position.set(CENTER.x, (UPPER.y0 + TIER.yEnd + 0.2) / 2, CENTER.z); scene.add(boxes);
 
@@ -638,7 +655,7 @@
     geo.setAttribute("aPart", new THREE.BufferAttribute(part, 1));
     return geo;
   }
-  const FAN_GEO = buildFan(false), FAN_LO = buildFan(true), crowdLods = [], CROWD_LOD_DIST = 105;
+  const FAN_GEO = buildFan(false), FAN_LO = buildFan(true), crowdLods = [], CROWD_LOD_DIST = 90;
   function updateCrowdLod() { // far-away sectors switch to the simpler fan
     for (const s of crowdLods) s.mesh.geometry = camera.position.distanceTo(s.c) > CROWD_LOD_DIST ? s.lo : s.hi;
   }
@@ -1227,7 +1244,7 @@
   // ================================================================ state
   const S = {
     phase: "menu", mode: null, cfg: { overs: 2, wkts: 3, diff: "medium" },
-    setup: { team: "MI", overs: 2, wkts: 3, diff: "medium" },
+    setup: { team: "MI", opp: null, overs: 2, wkts: 3, diff: "medium" },
     teams: [], innings: [], cur: 0, inn: null, target: null, token: 0,
     aim: { x: 0.1, L: 5.5, type: "fast" }, del: null, swung: false, shot: null, lift: 0, pendingHit: null,
     crossed: false, bounced: false, frozen: false, cpuSwing: null, cpuBowlAt: 0, thisOver: [], overDone: false,
@@ -1390,7 +1407,7 @@
     S.phase = "paused"; screen(null); hideMsg(); $("hud").classList.add("hidden");
   }
   function startOffline() {
-    const s = S.setup, cpuTeam = pick(TEAM_KEYS.filter((k) => k !== s.team));
+    const s = S.setup, cpuTeam = s.opp && s.opp !== s.team ? s.opp : pick(TEAM_KEYS.filter((k) => k !== s.team));
     S.mode = "cpu"; S.cfg = { overs: s.overs, wkts: s.wkts, diff: s.diff };
     S.teams = [{ key: s.team, name: IPL[s.team].name, kind: "human" }, { key: cpuTeam, name: IPL[cpuTeam].name, kind: "cpu" }];
     resetMatchState();
@@ -1830,7 +1847,7 @@
       S.swung = true; startShot(o.shot, o.a, NOW - SHOTS[o.shot].dur * SHOTS[o.shot].contact);
     }
     const P0 = at(0), endP = at(n - 1);
-    let f, target, speed = 7;
+    let f, target, speed = 7, delay = REACT;
     if (h.who !== null && h.who !== undefined) { // the fielder who catches / stops / drops it runs to that spot in time
       f = h.who === -1 ? keeper : fielders[h.who];
       const ci = Math.min(n - 1, Math.round(h.eventT / h.pdt)), cp = at(ci);
@@ -1843,13 +1860,16 @@
         S.catchFx = { f, p: cp, face: cp.clone().addScaledVector(inc, -4), lat: V(-inc.z, 0, inc.x).multiplyScalar(0.07), t: NOW + h.eventT, drop: o.dropped,
           jump: o.screamer ? Math.max(0.3, cp.y - 1.45) : 0 }; // high enough to take it in front of the face
       } else target = cp.clone().setY(0);
-      speed = clamp(f.position.distanceTo(target) / Math.max(0.25, h.eventT - REACT), 1.5, 9.5);
+      // arrive exactly in time: react later on easy ones, start at once (and dive across faster) on sharp chances
+      const d0 = f.position.distanceTo(target);
+      delay = Math.min(REACT, Math.max(0, h.eventT - d0 / 9.5 - 0.05));
+      speed = clamp(d0 / Math.max(0.05, h.eventT - delay - 0.03), 1.5, 14);
     } else { // nobody reached it: the nearest fielder chases it down
       f = fielders[nearestFielderIdx(endP)]; target = endP.clone().setY(0);
       const off = target.clone().sub(CENTER);
       if (off.length() > BOUNDARY - 1.5) target.copy(CENTER).add(off.setLength(BOUNDARY - 1.5));
     }
-    S.chaser = { f, target, speed, start: NOW + REACT };
+    S.chaser = { f, target, speed, start: NOW + delay };
     S.runners = !o.out && o.runs >= 1 && o.runs <= 3 ? { start: NOW + 0.25, runs: o.runs } : null;
     const dur = (n - 1) * h.pdt;
     S.hit = { path: h.path, n, pdt: h.pdt, start: NOW, o, dirV: dirVec(o.a), P0, P1: endP, flashT: h.flashT, flashed: false };
@@ -2452,6 +2472,9 @@
   function renderSetup() {
     const s = S.setup;
     renderPicker($("pick1"), s.team, (k) => { s.team = k; renderSetup(); });
+    if (s.opp === s.team) s.opp = null;
+    renderPicker($("pick2"), s.opp, (k) => { s.opp = s.opp === k ? null : k; renderSetup(); }, s.team); // tap again for random
+    $("oppNote").textContent = s.opp ? `· ${s.team} vs ${s.opp}` : "· random, or pick a team";
     renderChips($("oversChips"), [1, 2, 3, 5, 10, 20], s.overs, (v) => { s.overs = v; renderSetup(); }, null, true);
     renderChips($("wktChips"), [1, 2, 3, 5, 10], s.wkts, (v) => { s.wkts = v; renderSetup(); });
     renderChips($("diffChips"), ["easy", "medium", "hard"], s.diff, (v) => { s.diff = v; renderSetup(); }, (v) => v[0].toUpperCase() + v.slice(1));
@@ -2514,16 +2537,20 @@
   let last = performance.now() / 1000;
   function loop() {
     requestAnimationFrame(loop);
-    NOW = performance.now() / 1000;
-    const dt = Math.min(0.05, NOW - last); last = NOW;
-    update(dt); updateCamera(dt);
-    crowdCheer = Math.max(0, crowdCheer - dt * 0.3); // the crowd settles down a few seconds after a cheer
+    // One game clock for everything (ball, fielders, batters). On a slow frame the game is stepped forward in small
+    // pieces, so a fielder never falls behind the ball and takes a catch from metres away.
+    const real = performance.now() / 1000, el = Math.min(0.25, real - last); last = real;
+    const n = Math.max(1, Math.ceil(el / 0.034)), dt = el / n;
+    for (let i = 0; i < n; i++) { NOW += dt; update(dt); }
+    updateCamera(el);
+    crowdCheer = Math.max(0, crowdCheer - el * 0.3); // the crowd settles down a few seconds after a cheer
     crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
-    cloudGroup.rotation.y += dt * 0.004; // clouds drift across the sky
+    cloudGroup.rotation.y += el * 0.004; // clouds drift across the sky
     waveFlags(NOW); updateCrowdLod();
-    updatePrecip(dt);
+    updatePrecip(el);
     if (boardMsg && NOW < boardMsg.until + 0.3 && NOW - boardDrawnAt > 0.2) drawBoard(); // flashing, then back to the score
-    renderer.render(scene, camera);
+    if (EMBEDDED) $("kbHint").classList.toggle("show", !document.hasFocus() && !!S.inn && S.phase !== "menu");
+    if (onScreen) renderer.render(scene, camera);
   }
   loop();
 })();
