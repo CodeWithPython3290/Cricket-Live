@@ -211,8 +211,6 @@
     <div class="head"><button class="back" data-back="scrHome">←</button><h2>Play vs CPU</h2></div>
     <div class="label">Your team</div>
     <div class="teams" id="pick1"></div>
-    <div class="label">Opponent <span id="oppNote" class="muted small"></span></div>
-    <div class="teams" id="pick2"></div>
     <div class="grid2">
       <div><div class="label">Overs</div><div class="chips" id="oversChips"></div></div>
       <div><div class="label">Wickets</div><div class="chips" id="wktChips"></div></div>
@@ -655,7 +653,9 @@
     geo.setAttribute("aPart", new THREE.BufferAttribute(part, 1));
     return geo;
   }
-  const FAN_GEO = buildFan(false), FAN_LO = buildFan(true), crowdLods = [], CROWD_LOD_DIST = 90;
+  const FAN_GEO = buildFan(false), FAN_LO = buildFan(true), crowdLods = [];
+  // in the app's preview the whole crowd uses the simple fan, a little more spread out, to keep it smooth there
+  const CROWD_LOD_DIST = EMBEDDED ? 0 : 90, CROWD_SPREAD = EMBEDDED ? 1.3 : 1;
   function updateCrowdLod() { // far-away sectors switch to the simpler fan
     for (const s of crowdLods) s.mesh.geometry = camera.position.distanceTo(s.c) > CROWD_LOD_DIST ? s.lo : s.hi;
   }
@@ -707,8 +707,8 @@
       crowdLods.push({ mesh, hi: geo, lo, c: c.clone() });
     });
   }
-  fillTier(TIER, 1.0, 0.45);
-  fillTier(UPPER, 1.35, 0.4);
+  fillTier(TIER, 1.0 * CROWD_SPREAD, 0.45);
+  fillTier(UPPER, 1.35 * CROWD_SPREAD, 0.4);
 
   for (const z of [CENTER.z + BOUNDARY + 4.5, CENTER.z - BOUNDARY - 4.5]) {
     const screenM = new THREE.Mesh(new THREE.BoxGeometry(16, 7, 0.6), M(0xf8fafc)); screenM.position.set(0, 3.5, z); scene.add(screenM);
@@ -1174,6 +1174,13 @@
     u.elL.rotation.x = u.elR.rotation.x = 0.15 + 0.5 * a;
     u.hips.position.y = legH(h, k);
   }
+  function crouchCatch(p, a) { // knees bent and bending forward to take a low catch, a = 0..1
+    const u = p.userData, h = 1.1 * a, k = -1.7 * a;
+    u.hipL.rotation.set(h, 0, -0.2 * a); u.hipR.rotation.set(h, 0, 0.2 * a);
+    u.knL.rotation.set(k, 0, 0); u.knR.rotation.set(k, 0, 0);
+    u.spine.rotation.set(-1.1 * a, 0, 0); u.headG.rotation.set(0.6 * a, 0, 0);
+    u.hips.position.y = legH(h, k);
+  }
   function keeperPose(p, a) {
     const u = p.userData, h = 1.25 * a, k = -2.0 * a;
     u.hipL.rotation.set(h, 0, -0.3 * a); u.hipR.rotation.set(h, 0, 0.3 * a);
@@ -1201,8 +1208,9 @@
   // Field placings [name, angle, distance from the batter] (angle: 0 = straight, + = leg side, - = off side).
   // "deep" fielders patrol just inside the boundary rope.
   const dirVec = (a) => V(Math.sin(a), 0, -Math.cos(a));
-  const FIELD_SPEC = [["slip", -(Math.PI - 0.35), 6.5], ["point", -1.65, 24], ["cover", -0.95, 27], ["mid-off", -0.3, 25],
-    ["mid-on", 0.32, 25], ["mid-wicket", 1.0, 27], ["square leg", 1.7, 23], ["deep mid-wicket", 0.8, "deep"], ["deep cover", -1.2, "deep"]];
+  // A T20 field: four in the ring and five boundary riders, so the deep is covered all the way round.
+  const FIELD_SPEC = [["slip", -(Math.PI - 0.35), 6.5], ["point", -1.65, 24], ["cover", -0.85, 27], ["mid-wicket", 0.95, 27],
+    ["long-off", -0.28, "deep"], ["long-on", 0.3, "deep"], ["deep cover", -1.35, "deep"], ["deep mid-wicket", 1.2, "deep"], ["fine leg", 2.6, "deep"]];
   const FIELD = FIELD_SPEC.map(([, a, r]) => {
     if (r !== "deep") return [r, a];
     const p = rayCircle(V(0, 0, ZH), dirVec(a), BOUNDARY - 3.5);
@@ -1244,7 +1252,7 @@
   // ================================================================ state
   const S = {
     phase: "menu", mode: null, cfg: { overs: 2, wkts: 3, diff: "medium" },
-    setup: { team: "MI", opp: null, overs: 2, wkts: 3, diff: "medium" },
+    setup: { team: "MI", overs: 2, wkts: 3, diff: "medium" },
     teams: [], innings: [], cur: 0, inn: null, target: null, token: 0,
     aim: { x: 0.1, L: 5.5, type: "fast" }, del: null, swung: false, shot: null, lift: 0, pendingHit: null,
     crossed: false, bounced: false, frozen: false, cpuSwing: null, cpuBowlAt: 0, thisOver: [], overDone: false,
@@ -1407,7 +1415,7 @@
     S.phase = "paused"; screen(null); hideMsg(); $("hud").classList.add("hidden");
   }
   function startOffline() {
-    const s = S.setup, cpuTeam = s.opp && s.opp !== s.team ? s.opp : pick(TEAM_KEYS.filter((k) => k !== s.team));
+    const s = S.setup, cpuTeam = pick(TEAM_KEYS.filter((k) => k !== s.team)); // a random opponent
     S.mode = "cpu"; S.cfg = { overs: s.overs, wkts: s.wkts, diff: s.diff };
     S.teams = [{ key: s.team, name: IPL[s.team].name, kind: "human" }, { key: cpuTeam, name: IPL[cpuTeam].name, kind: "cpu" }];
     resetMatchState();
@@ -1484,8 +1492,8 @@
     batsman.position.set(0.5, 0, BAT_Z); batsman.rotation.y = Math.PI / 2;
     nonStriker.position.set(-0.9, 0, -19.4); nonStriker.rotation.y = Math.PI; stand(nonStriker);
     bowler.position.set(-0.35, 0, -26.5); bowler.rotation.y = Math.PI; stand(bowler);
-    keeper.position.copy(keeper.userData.home); keeper.rotation.y = 0;
-    fielders.forEach((f) => { f.position.copy(f.userData.home); face(f, 0, ZH); stand(f); });
+    keeper.position.copy(keeper.userData.home); keeper.rotation.set(0, 0, 0); // (also undoes a dive)
+    fielders.forEach((f) => { f.position.copy(f.userData.home); f.rotation.set(0, 0, 0); face(f, 0, ZH); stand(f); });
     stumps.parts.forEach((p) => p.rotation.set(0, 0, 0));
     stumps.bails.forEach((b) => { b.position.copy(b.userData.home); b.rotation.set(0, 0, 0); });
   }
@@ -1501,7 +1509,7 @@
   function resolveSpec(spec, mul) {
     const fast = spec.type === "fast";
     return { type: spec.type, aimX: clamp(spec.aimX, -1.4, 1.4), L: clamp(spec.L, 1.6, 10.5),
-      speed: (fast ? rand(25.5, 29.5) : rand(16.5, 19)) * mul,
+      speed: (fast ? rand(22, 25.4) : rand(15.2, 17.5)) * mul, // pace about 108-124 km/h, spin 70-80 (on medium)
       turn: fast ? rand(-0.025, 0.025) * PHYS.swing : (Math.random() < 0.5 ? -1 : 1) * rand(0.05, 0.1) }; // cloud helps swing
   }
   function makeDelivery(s) {
@@ -1553,28 +1561,48 @@
     $("speed").innerHTML = `${S.del.kmh} km/h<span>${S.del.type === "fast" ? "Pace" : "Spin"}</span>`;
     if (batKind() === "cpu") scheduleCpuSwing();
   }
-  // Computer batter: reads the length and line, picks a sensible shot, and times it according to batting-order skill.
+  // How hard the computer batter goes after the bowling (0 = knocking it around, 1 = swinging at everything), from the
+  // match situation: in a chase, the runs needed per ball left (30 off 8 = all out attack, 8 off 50 = no hurry); in the
+  // first innings, the stage of the innings. Fewer wickets in hand means less risk unless there's no choice.
+  function battingAggression(skill) {
+    const inn = S.inn, ballsLeft = Math.max(1, S.cfg.overs * 6 - inn.balls), wktsLeft = S.cfg.wkts - inn.wkts;
+    let aggro;
+    if (S.target) {
+      const need = S.target - inn.runs, rpb = need / ballsLeft;
+      aggro = rpb <= 0.5 ? 0.06 : rpb <= 1 ? lerp(0.12, 0.35, (rpb - 0.5) / 0.5) : rpb <= 2 ? lerp(0.35, 0.85, rpb - 1) : 1;
+      if (need <= 4 && rpb < 1) aggro = Math.min(aggro, 0.08); // nearly there: just tick it over
+    } else {
+      const prog = inn.balls / (S.cfg.overs * 6);
+      aggro = prog > 0.75 ? 0.6 : prog > 0.5 ? 0.38 : 0.26; // build, then cut loose at the death
+    }
+    if (wktsLeft <= 1 && aggro < 0.9) aggro *= 0.7; // last pair: don't throw it away
+    return clamp(aggro + (1 - skill) * 0.12, 0, 1); // tail-enders swing a bit more anyway
+  }
+  // Computer batter: reads the length and line, picks a sensible shot for the match situation, and times it according
+  // to batting-order skill.
   function scheduleCpuSwing() {
     const d = S.del, inn = S.inn, st = inn.batters[inn.striker], skill = st ? st.skill : 0.7;
-    const ballsLeft = S.cfg.overs * 6 - inn.balls;
-    const reqRate = S.target ? (S.target - inn.runs) / Math.max(1, ballsLeft) * 6 : 0;
-    const aggro = clamp(0.22 + (ballsLeft <= 6 ? 0.25 : 0) + (S.target ? clamp((reqRate - 7) * 0.06, 0, 0.45) : 0) + (1 - skill) * 0.3, 0, 0.9);
+    const aggro = battingAggression(skill), allOut = aggro > 0.9;
     const short = d.L > 7.4, full = d.L < 4.3, yorker = d.L < 2.6, offLine = d.xH < -0.3, legLine = d.xH > 0.3;
-    // good batters leave the wide ones, especially outside off stump
-    if (Math.abs(d.xH) > 0.85 && Math.random() < (d.xH < 0 ? 0.75 : 0.4) * skill) return;
+    // good batters leave the wide ones, especially outside off stump (not when every ball has to go)
+    if (Math.abs(d.xH) > 0.85 && Math.random() < (d.xH < 0 ? 0.75 : 0.4) * skill * (1 - aggro)) return;
     const intent = { loft: false, defend: false, aim: 0 };
-    if (!short && !full && Math.abs(d.xH) < 0.35 && Math.random() < 0.45 * skill * (1 - aggro)) intent.defend = true; // respect a good ball
-    else if (yorker) { intent.defend = Math.random() < 0.6 * skill; intent.aim = rand(-0.4, 0.4); }
+    if (allOut) { // big hitting: everything goes in the air, yorkers get the slog over mid-wicket
+      intent.loft = Math.random() < (yorker ? 0.5 : 0.9);
+      intent.aim = yorker || legLine ? rand(0.3, 1.3) : short ? (offLine ? rand(-1.6, -1.0) : rand(0.8, 1.6)) : rand(-0.9, 0.9);
+    } else if (!short && !full && Math.abs(d.xH) < 0.35 && Math.random() < (0.3 + 0.35 * (1 - aggro)) * skill * (1 - aggro)) intent.defend = true; // respect a good ball
+    else if (yorker) { intent.defend = Math.random() < 0.6 * skill * (1 - aggro * 0.5); intent.aim = rand(-0.4, 0.4); }
     else if (short) { intent.aim = offLine ? rand(-1.9, -1.1) : rand(0.8, 1.7); intent.loft = Math.random() < aggro * 0.8; } // cut or pull
     else if (d.type === "spin" && legLine && Math.random() < 0.45 * skill) intent.aim = rand(1.2, 2.2); // sweep
     else if (offLine) { intent.aim = rand(-1.25, -0.35); intent.loft = Math.random() < aggro * 0.7; } // through the off side
     else if (legLine) { intent.aim = rand(0.4, 1.6); intent.loft = Math.random() < aggro * 0.8; } // flick / on drive
     else { intent.aim = rand(-0.35, 0.35); intent.loft = Math.random() < aggro * (full ? 1 : 0.6); } // straight
-    if (skill < 0.55 && !intent.defend && Math.random() < 0.5) { intent.aim = rand(0.3, 1.3); intent.loft = Math.random() < 0.6; } // tail-end slog
+    if (skill < 0.55 && !intent.defend && aggro > 0.25 && Math.random() < 0.5) { intent.aim = rand(0.3, 1.3); intent.loft = Math.random() < 0.6; } // tail-end slog
     let sd = { easy: 0.1, medium: 0.08, hard: 0.064 }[S.cfg.diff] * lerp(1.8, 0.7, skill); // openers time it far better
+    sd *= 1 + 0.3 * aggro; // slogging is riskier than placing it
     if (yorker) sd *= lerp(1.5, 1.1, skill);
     sd /= 1 + 0.15 * Math.min(3, d.fam || 0); // a repeated delivery is easier to read
-    if (yorker && (d.fam || 0) >= 2 && Math.random() < 0.45) { intent.defend = true; intent.aim = rand(-0.3, 0.3); } // expecting it: dig it out
+    if (yorker && !allOut && (d.fam || 0) >= 2 && Math.random() < 0.45) { intent.defend = true; intent.aim = rand(-0.3, 0.3); } // expecting it: dig it out
     if (d.type === "spin") sd *= 0.85;
     S.cpuSwing = { at: S.releaseAt + d.T + gauss() * sd - 0.01, intent };
   }
@@ -1742,15 +1770,18 @@
   }
   // The first fielder (or the keeper) who can get to the ball in time: "catch" = in the air between knee and
   // above-head height, "stop" = along the ground. Fielders react, then run at RUN_SPEED.
+  // "dive" = like a catch but with a full-length dive on the end of the run (low to waist height).
+  const DIVE_LEN = 2.4, DIVE_T = 0.35, DIVE_RATE = 0.35, LOW_CATCH_RATE = 0.7, DIVE_CATCH_RATE = 0.75;
   function findFielder(pts, from, to, mode, exclude) {
     for (let i = Math.max(1, from); i < Math.min(to, pts.length); i++) {
       const [x, y, z] = pts[i], t = i * SIM_DT;
       if (radial(x, z) > BOUNDARY - 0.3) return null; // over the rope: out of reach
-      if (mode === "catch" ? y < 0.35 || y > 1.6 : y > 1.4) continue; // catches are taken between the knees and just above the head
+      // catches are taken from just off the grass to just above the head
+      if (mode === "catch" ? y < 0.12 || y > 1.6 : mode === "dive" ? y < 0.12 || y > 1.3 : y > 1.4) continue;
       for (let idx = -1; idx < fielders.length; idx++) {
         if (exclude && exclude.has(idx)) continue;
         const h = idx === -1 ? keeper.userData.home : fielders[idx].userData.home;
-        const reach = (mode === "catch" ? 1.0 : 1.3) + (idx === -1 ? 3.5 : RUN_SPEED) * Math.max(0, t - REACT);
+        const reach = (mode === "catch" ? 1.0 : mode === "dive" ? 1.0 + DIVE_LEN : 1.3) + (idx === -1 ? 3.5 : RUN_SPEED) * Math.max(0, t - REACT);
         if (Math.hypot(h.x - x, h.z - z) <= reach) return { i, idx };
       }
     }
@@ -1785,12 +1816,23 @@
     let pts = sim.pts, who = null, eventI = null;
     const ev = sim.ev;
     o.runs = 0; o.out = null; o.stopped = false; o.dropped = false;
-    // in the air: the first fielder who gets under it takes the catch (82%), otherwise it's dropped
+    // in the air: the first fielder who gets under it takes the catch (83%; harder if it's down by the grass),
+    // otherwise it's dropped. Now and then a fielder who can't quite get there throws in a full-length dive.
     if (o.aerial) {
-      const c = findFielder(pts, 1, ev.land >= 0 ? ev.land + 1 : pts.length, "catch");
+      const to = ev.land >= 0 ? ev.land + 1 : pts.length;
+      let c = findFielder(pts, 1, to, "catch");
+      if (!c && Math.random() < DIVE_RATE) { c = findFielder(pts, 1, to, "dive"); if (c) o.dive = true; }
+      else if (c && c.idx >= 0 && Math.random() < 0.15) { // sometimes the fielder takes it late, running in, down by the grass
+        const h = fielders[c.idx].userData.home;
+        for (let i = Math.min(to, pts.length) - 1; i > c.i; i--) {
+          const [x, y, z] = pts[i];
+          if (y >= 0.15 && y < 0.5 && Math.hypot(h.x - x, h.z - z) <= 1.0 + RUN_SPEED * Math.max(0, i * SIM_DT - REACT)) { c = { i, idx: c.idx }; break; }
+        }
+      }
       if (c) {
         who = c.idx; eventI = c.i;
-        if (Math.random() < CATCH_RATE) { o.out = "caught"; o.catcher = c.idx; pts = pts.slice(0, c.i + 1); }
+        const rate = o.dive ? DIVE_CATCH_RATE : pts[c.i][1] < 0.35 ? LOW_CATCH_RATE : CATCH_RATE;
+        if (Math.random() < rate) { o.out = "caught"; o.catcher = c.idx; pts = pts.slice(0, c.i + 1); }
         else {
           o.dropped = true; o.dropper = c.idx; o.runs = pick([0, 1, 1]);
           const fall = simulate(V().fromArray(pts[c.i]), V(rand(-1.5, 1.5), 1.5, rand(-1.5, 1.5)), 3);
@@ -1854,16 +1896,26 @@
       const inc = cp.clone().sub(at(Math.max(0, ci - 1))).setY(0);
       if (inc.lengthSq() < 1e-8) inc.set(0, 0, 1);
       inc.normalize();
-      if (o.out || o.dropped) {
+      let arrive = h.eventT;
+      if ((o.out || o.dropped) && o.dive) {
+        // full-length dive: run to a take-off spot, launch at the ball and land stretched out with it in the hands.
+        // The body tips forward just enough for the hands to meet the ball at its height.
+        const dir = cp.clone().sub(f.position).setY(0); if (dir.lengthSq() < 1e-6) dir.copy(inc).negate(); dir.normalize();
+        const pitch = Math.acos(clamp((cp.y - 0.12) / 1.36, 0.05, 0.95));
+        const land = cp.clone().addScaledVector(dir, -(1.36 * Math.sin(pitch) + 0.3)).setY(0);
+        target = land.clone().addScaledVector(dir, -Math.min(2.0, f.position.distanceTo(land))); arrive = Math.max(0.05, h.eventT - DIVE_T);
+        S.catchFx = { f, p: cp, face: cp.clone().addScaledVector(dir, 4), lat: V(-dir.z, 0, dir.x).multiplyScalar(0.07), t: NOW + h.eventT,
+          drop: o.dropped, dive: { from: target.clone(), land, pitch } };
+      } else if (o.out || o.dropped) {
         // stand just behind where the ball comes down, facing it, so it drops into the hands rather than onto the head
-        target = cp.clone().addScaledVector(inc, 0.42).setY(0);
+        target = cp.clone().addScaledVector(inc, cp.y < 0.6 ? 0.6 : 0.42).setY(0); // (further back for a low one, bending forward)
         S.catchFx = { f, p: cp, face: cp.clone().addScaledVector(inc, -4), lat: V(-inc.z, 0, inc.x).multiplyScalar(0.07), t: NOW + h.eventT, drop: o.dropped,
           jump: o.screamer ? Math.max(0.3, cp.y - 1.45) : 0 }; // high enough to take it in front of the face
       } else target = cp.clone().setY(0);
       // arrive exactly in time: react later on easy ones, start at once (and dive across faster) on sharp chances
       const d0 = f.position.distanceTo(target);
-      delay = Math.min(REACT, Math.max(0, h.eventT - d0 / 9.5 - 0.05));
-      speed = clamp(d0 / Math.max(0.05, h.eventT - delay - 0.03), 1.5, 14);
+      delay = Math.min(REACT, Math.max(0, arrive - d0 / 9.5 - 0.05));
+      speed = clamp(d0 / Math.max(0.05, arrive - delay - 0.03), 1.5, 14);
     } else { // nobody reached it: the nearest fielder chases it down
       f = fielders[nearestFielderIdx(endP)]; target = endP.clone().setY(0);
       const off = target.clone().sub(CENTER);
@@ -1884,11 +1936,15 @@
       sfx.wicket(); crowdCheer = 1; S.celebrate = { t0: NOW };
       showFlash("WHAT A CATCH!", "#ef4444", `${capFirst(fielderName(o.catcher))} leaps on the rope! ${st.name} ${st.runs} (${st.balls + 1})`);
       boardEvent("STUNNER!", `${st.name} c ${fielderName(o.catcher)}`, "#ef4444");
+    } else if (o.out && o.dive) {
+      sfx.wicket(); crowdCheer = 1; S.celebrate = { t0: NOW };
+      showFlash("DIVING CATCH!", "#ef4444", `${capFirst(fielderName(o.catcher))} at full stretch! ${st.name} ${st.runs} (${st.balls + 1})`);
+      boardEvent("WHAT A GRAB!", `${st.name} c ${fielderName(o.catcher)}`, "#ef4444");
     } else if (o.out) {
       sfx.wicket(); crowdCheer = 0.7; S.celebrate = { t0: NOW };
       showFlash("CAUGHT!", "#ef4444", `${st.name} c ${fielderName(o.catcher)} ${st.runs} (${st.balls + 1})`);
       boardEvent("OUT!", `${st.name} c ${fielderName(o.catcher)}`, "#ef4444");
-    } else if (o.dropped) showFlash("DROPPED!", "#fb923c", `${capFirst(fielderName(o.dropper))} puts it down`);
+    } else if (o.dropped) showFlash("DROPPED!", "#fb923c", o.dive ? `${capFirst(fielderName(o.dropper))} dives but can't hold on` : `${capFirst(fielderName(o.dropper))} puts it down`);
     else if (o.runs === 6) {
       sfx.cheer(); crowdCheer = 1;
       const where = { rope: "Over the rope", crowd: "Into the crowd!", upper: "Into the top tier!", out: "OUT OF THE GROUND!" }[o.sixKind] || "";
@@ -2092,8 +2148,19 @@
     // taking a catch: face the ball and get both hands to where it's dropping (held after a clean catch)
     if (S.catchFx && NOW > S.catchFx.t - 0.45 && !(S.catchFx.drop && NOW > S.catchFx.t + 0.3)) {
       const cf = S.catchFx, f = cf.f, U = f.userData;
-      if (!S.chaser || f.position.distanceTo(S.chaser.target) <= 0.35) stand(f);
+      const arrived = !S.chaser || f.position.distanceTo(S.chaser.target) <= 0.35;
       face(f, cf.face.x, cf.face.z);
+      if (cf.dive) { // launch off the ground, tip forward and land stretched out at full length
+        const k = clamp((NOW - (cf.t - DIVE_T)) / DIVE_T, 0, 1), e = smooth(k);
+        if (k > 0) {
+          stand(f);
+          f.position.lerpVectors(cf.dive.from, cf.dive.land, e); f.position.y = 0.35 * Math.sin(Math.PI * k);
+          f.rotation.order = "YXZ"; f.rotation.x = -cf.dive.pitch * e;
+        }
+      } else if (arrived) {
+        stand(f);
+        if (cf.p.y < 0.6) crouchCatch(f, clamp((0.6 - cf.p.y) / 0.45, 0, 1)); // down low for one just off the grass
+      }
       if (cf.jump) { // a leap on the rope: up to meet it, then down with the ball in both hands
         const k = (NOW - cf.t) / 0.4;
         f.position.y = Math.abs(k) < 1 ? cf.jump * (1 - k * k) : 0;
@@ -2129,14 +2196,20 @@
   const STANCE = pose({});
   const BACKLIFT = pose({ hx: -0.1, hy: 0.98, hz: -0.3, swing: -1.9, yaw: 0.15, twist: 0.12 });
   // keys: [fraction of the stroke, pose]; contact = fraction where the bat meets the ball
+  // (front-foot strokes: the front foot goes down the pitch first, then the bat comes down and through)
   const SHOTS = {
     drive: { dur: 0.55, contact: 0.42, keys: [
+      [0.2, pose({ hx: 0.05, hy: 0.95, hz: -0.36, swing: -1.1, stride: 0.75, lean: 0.15, twist: 0.08 })],
       [0.42, pose({ hx: 0.24, hy: 0.7, hz: -0.4, swing: 0.1, stride: 1, lean: 0.3 })],
+      [0.7, pose({ hx: 0.22, hy: 1.0, hz: -0.32, swing: 1.6, stride: 1, lean: 0.3, twist: -0.12 })],
       [1, pose({ hx: 0.16, hy: 1.25, hz: -0.22, swing: 2.6, stride: 1, lean: 0.25, twist: -0.25 })]] },
     loft: { dur: 0.6, contact: 0.4, keys: [
+      [0.2, pose({ hx: 0.02, hy: 1.0, hz: -0.36, swing: -1.2, stride: 0.8, lean: 0.05, twist: 0.1 })],
       [0.4, pose({ hx: 0.22, hy: 0.78, hz: -0.4, swing: 0.25, stride: 1, lean: 0.15 })],
+      [0.68, pose({ hx: 0.18, hy: 1.15, hz: -0.28, swing: 1.9, stride: 1, lean: 0.05, twist: -0.2 })],
       [1, pose({ hx: 0.1, hy: 1.45, hz: -0.12, swing: 3.1, stride: 1, lean: -0.05, twist: -0.35 })]] },
     defend: { dur: 0.45, contact: 0.6, keys: [
+      [0.3, pose({ hx: 0.12, hy: 0.85, hz: -0.36, swing: -0.9, stride: 0.8, lean: 0.25 })],
       [0.6, pose({ hx: 0.28, hy: 0.64, hz: -0.38, swing: -0.25, stride: 1, lean: 0.35 })],
       [1, pose({ hx: 0.28, hy: 0.64, hz: -0.38, swing: -0.25, stride: 1, lean: 0.35 })]] },
     backDefend: { dur: 0.45, contact: 0.6, keys: [
@@ -2155,9 +2228,11 @@
       [0.5, pose({ hx: 0.22, hy: 0.5, hz: -0.42, swing: 1.52, yaw: -0.2, stride: 1, crouch: 1, lean: 0.3 })],
       [1, pose({ hx: 0.1, hy: 0.7, hz: -0.2, swing: 1.7, yaw: -1.9, stride: 1, crouch: 1, lean: 0.2, twist: -0.5 })]] },
     flick: { dur: 0.5, contact: 0.45, keys: [
+      [0.22, pose({ hx: 0.05, hy: 0.92, hz: -0.36, swing: -1.0, yaw: -0.1, roll: -0.2, stride: 0.75, lean: 0.15 })],
       [0.45, pose({ hx: 0.2, hy: 0.72, hz: -0.38, swing: 0.15, yaw: -0.4, roll: -0.6, stride: 1, lean: 0.25 })],
       [1, pose({ hx: 0.12, hy: 1.05, hz: -0.18, swing: 1.6, yaw: -1.5, roll: -0.9, stride: 1, lean: 0.15, twist: -0.4 })]] },
     dig: { dur: 0.4, contact: 0.55, keys: [
+      [0.28, pose({ hx: 0.02, hy: 0.8, hz: -0.38, swing: -0.9, lean: 0.15, crouch: 0.15 })],
       [0.55, pose({ hx: 0.12, hy: 0.52, hz: -0.4, swing: 0.05, lean: 0.3, crouch: 0.3 })],
       [1, pose({ hx: 0.12, hy: 0.55, hz: -0.4, swing: 0.1, lean: 0.3, crouch: 0.3 })]] },
     leave: { dur: 0.5, contact: 0.5, keys: [
@@ -2172,18 +2247,26 @@
   }
   function lerpPose(a, b, k) { const o = {}; for (const key in POSE0) o[key] = lerp(a[key], b[key], k); return o; }
   const smooth = (k) => k * k * (3 - 2 * k);
+  // The key poses are joined by a smooth curve (Catmull-Rom), and the stroke's clock speeds up into contact and eases
+  // off through the follow-through, so the bat accelerates through the ball instead of pausing at each pose.
+  const cr = (p0, p1, p2, p3, s) => 0.5 * (2 * p1 + (p2 - p0) * s + (2 * p0 - 5 * p1 + 4 * p2 - p3) * s * s + (3 * p1 - p0 - 3 * p2 + p3) * s * s * s);
   function shotPose(sh) {
     const spec = SHOTS[sh.name], u = (NOW - sh.start) / spec.dur;
     if (u < 0) return BACKLIFT;
-    let prevT = 0, prev = BACKLIFT;
-    for (const [t, p0] of spec.keys) {
-      const p = sh.yawOff ? Object.assign({}, p0, { yaw: p0.yaw + sh.yawOff }) : p0;
-      if (u <= t) return lerpPose(prev, p, smooth((u - prevT) / (t - prevT)));
-      prevT = t; prev = p;
+    const keys = [[0, BACKLIFT], ...spec.keys.map(([t, p]) => [t, sh.yawOff ? Object.assign({}, p, { yaw: p.yaw + sh.yawOff }) : p])];
+    const last = keys[keys.length - 1][1];
+    if (u >= 1) { // stroke finished: hold the follow-through, then settle back into the stance
+      const hold = (u - 1) * spec.dur;
+      return hold < 0.7 ? last : lerpPose(last, STANCE, smooth(clamp((hold - 0.7) / 0.6, 0, 1)));
     }
-    // stroke finished: hold the follow-through, then settle back into the stance
-    const hold = (u - 1) * spec.dur;
-    return hold < 0.7 ? prev : lerpPose(prev, STANCE, smooth(clamp((hold - 0.7) / 0.6, 0, 1)));
+    const c = spec.contact, w = u < c ? c * Math.pow(u / c, 1.5) : c + (1 - c) * (1 - Math.pow(1 - (u - c) / (1 - c), 2));
+    let i = 0;
+    while (i < keys.length - 2 && w > keys[i + 1][0]) i++;
+    const s = clamp((w - keys[i][0]) / (keys[i + 1][0] - keys[i][0]), 0, 1);
+    const P = [keys[Math.max(0, i - 1)][1], keys[i][1], keys[i + 1][1], keys[Math.min(keys.length - 1, i + 2)][1]];
+    const o = {};
+    for (const k in POSE0) o[k] = cr(P[0][k], P[1][k], P[2][k], P[3][k], s);
+    return o;
   }
   function batsmanPose(dt) {
     if (S.phase === "celebrate" && S.milestone) return celebratePose();
@@ -2471,11 +2554,7 @@
   function renderHome() { $("homeUser").innerHTML = S.me ? `Signed in as <b>${esc(S.me.username)}</b>` : ""; }
   function renderSetup() {
     const s = S.setup;
-    renderPicker($("pick1"), s.team, (k) => { s.team = k; renderSetup(); });
-    if (s.opp === s.team) s.opp = null;
-    renderPicker($("pick2"), s.opp, (k) => { s.opp = s.opp === k ? null : k; renderSetup(); }, s.team); // tap again for random
-    $("oppNote").textContent = s.opp ? `· ${s.team} vs ${s.opp}` : "· random, or pick a team";
-    renderChips($("oversChips"), [1, 2, 3, 5, 10, 20], s.overs, (v) => { s.overs = v; renderSetup(); }, null, true);
+    renderPicker($("pick1"), s.team, (k) => { s.team = k; renderSetup(); });    renderChips($("oversChips"), [1, 2, 3, 5, 10, 20], s.overs, (v) => { s.overs = v; renderSetup(); }, null, true);
     renderChips($("wktChips"), [1, 2, 3, 5, 10], s.wkts, (v) => { s.wkts = v; renderSetup(); });
     renderChips($("diffChips"), ["easy", "medium", "hard"], s.diff, (v) => { s.diff = v; renderSetup(); }, (v) => v[0].toUpperCase() + v.slice(1));
   }
