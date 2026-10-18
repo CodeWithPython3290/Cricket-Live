@@ -142,6 +142,9 @@
   #topR { position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; align-items: center; }
   #speed { padding: 10px 14px; border-radius: 12px; background: var(--hud); color: #fff; font-weight: 800; font-size: 14px; }
   #speed:empty { display: none; }
+  #wx { padding: 10px 14px; border-radius: 12px; background: var(--hud); color: #fff; font-weight: 800; font-size: 14px; white-space: nowrap; }
+  #wx:empty { display: none; }
+  #wx span { opacity: .65; font-weight: 600; margin-left: 6px; }
   #speed span { opacity: .65; font-weight: 600; margin-left: 6px; }
   .icon-btn { width: 42px; height: 42px; border-radius: 12px; border: 0; background: var(--hud); color: #fff; font-size: 18px; }
   .icon-btn:hover { background: rgba(15,23,42,.95); }
@@ -178,7 +181,7 @@
     <div class="rb-win" id="rbWin"></div>
     <div class="rb-info" id="rbInfo"></div>
   </div>
-  <div id="topR"><div id="speed"></div><button id="menuBtn" class="icon-btn" title="Menu">☰</button></div>
+  <div id="topR"><div id="wx"></div><div id="speed"></div><button id="menuBtn" class="icon-btn" title="Menu">☰</button></div>
   <div id="status" class="hidden"></div>
   <div id="flash"></div>
   <div id="timing"></div>
@@ -349,18 +352,8 @@
     draw(c.getContext("2d"), w, h);
     const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
   }
-  scene.background = canvasTex(512, 512, (g, w, h) => {
-    const gr = g.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, "#2a6fc9"); gr.addColorStop(0.6, "#86c1ef"); gr.addColorStop(1, "#e3f2fd");
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    g.fillStyle = "rgba(255,255,255,0.85)"; // soft cartoon clouds
-    for (let i = 0; i < 12; i++) {
-      const cx = Math.random() * w, cy = rand(24, h * 0.42), s = rand(16, 36);
-      for (let j = 0; j < 5; j++) { g.beginPath(); g.arc(cx + (j - 2) * s * 0.7, cy + Math.sin(j * 1.7) * s * 0.25, s * rand(0.6, 1), 0, Math.PI * 2); g.fill(); }
-    }
-  });
   scene.fog = new THREE.Fog(0xbcd9f2, 160, 420);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x3b6b35, 0.8));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x3b6b35, 0.8); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffffff, 0.85);
   sun.position.set(25, 55, -30); sun.target.position.set(0, 0, -8);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004;
@@ -395,10 +388,11 @@
   const boards = new THREE.Mesh(new THREE.CylinderGeometry(BOUNDARY + 3, BOUNDARY + 3, 1.1, 120, 1, true),
     new THREE.MeshBasicMaterial({ map: adTex, side: THREE.DoubleSide }));
   boards.position.set(CENTER.x, 0.55, CENTER.z); scene.add(boards);
-  // ---------------- stands and spectators
-  // Two stepped tiers of seating (a lower bowl and an upper tier). Every seat holds a spectator: a low-poly seated
-  // person (chair, legs, shoes, shirt, arms, neck, head, hair) drawn with instancing. A small shader gives each fan
-  // their own shirt, skin and hair colour, makes them sway, and on big moments makes them jump with arms in the air.
+  // ---------------- stands, roof, floodlights and spectators
+  // Two stepped tiers of seating (a lower bowl and an upper tier) under a roof canopy, with four floodlight pylons.
+  // Every seat holds the same low-poly seated spectator, drawn with instancing in sectors so that parts of the crowd
+  // behind the camera are skipped. A small shader gives each fan their own shirt, skin and hair colour, makes them
+  // sway, and on big moments makes them jump with their arms in the air.
   const TIER = { r0: 72, depth: 1.15, rise: 0.55, rows: 14, y0: 0.9 };
   TIER.rEnd = TIER.r0 + TIER.rows * TIER.depth; TIER.yEnd = TIER.y0 + (TIER.rows - 1) * TIER.rise;
   const UPPER = { r0: 90, depth: 1.6, rise: 1.05, rows: 22, y0: 9.6 };
@@ -408,25 +402,67 @@
     if (r < TIER.r0) return 0;
     if (r < TIER.rEnd) return TIER.y0 + Math.floor((r - TIER.r0) / TIER.depth) * TIER.rise;
     if (r < UPPER.r0) return TIER.yEnd;
-    if (r < UPPER.r1) return UPPER.y0 + ((r - UPPER.r0) / (UPPER.r1 - UPPER.r0)) * (UPPER.yTop - UPPER.y0); // upper tier slope
+    if (r < UPPER.r1) return UPPER.y0 + Math.floor((r - UPPER.r0) / UPPER.depth) * UPPER.rise;
     if (r < UPPER.r1 + 4) return UPPER.y1; // back wall
     return -1;
   }
   const steps = [new THREE.Vector2(TIER.r0, 0)];
-  for (let i = 0; i < TIER.rows; i++) {
-    const y = TIER.y0 + i * TIER.rise, r = TIER.r0 + i * TIER.depth;
-    steps.push(new THREE.Vector2(r, y), new THREE.Vector2(r + TIER.depth, y));
+  for (const T of [TIER, UPPER]) {
+    if (T === UPPER) steps.push(new THREE.Vector2(UPPER.r0, TIER.yEnd)); // front wall of the upper tier
+    for (let i = 0; i < T.rows; i++) {
+      const y = T.y0 + i * T.rise, r = T.r0 + i * T.depth;
+      steps.push(new THREE.Vector2(r, y), new THREE.Vector2(r + T.depth, y));
+    }
   }
-  // front wall of the upper tier; the upper seating itself is the painted stand below
-  steps.push(new THREE.Vector2(UPPER.r0, TIER.yEnd), new THREE.Vector2(UPPER.r0, UPPER.y0), new THREE.Vector2(UPPER.r0 + 0.5, UPPER.y0), new THREE.Vector2(UPPER.r0 + 0.5, 0));
+  steps.push(new THREE.Vector2(UPPER.r1, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, 0));
   const tiers = new THREE.Mesh(new THREE.LatheGeometry(steps, 160), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.DoubleSide }));
   tiers.position.copy(CENTER); tiers.receiveShadow = true; scene.add(tiers);
-  const roof = new THREE.Mesh(new THREE.RingGeometry(UPPER.r1 - 20, UPPER.r1 + 2, 120), new THREE.MeshLambertMaterial({ color: 0xe5e7eb, side: THREE.DoubleSide }));
-  roof.rotation.x = -Math.PI / 2; roof.position.set(CENTER.x, UPPER.y1 + 3.5, CENTER.z); scene.add(roof);
+
+  // roof: a canopy sloping up from the back wall, a dark fascia along its front edge, and columns holding it up
+  const ROOF = { inner: UPPER.r1 - 14, outer: UPPER.r1 + 1.5, yIn: UPPER.y1 + 8, yOut: UPPER.y1 + 4 };
+  const canopy = new THREE.Mesh(new THREE.CylinderGeometry(ROOF.inner, ROOF.outer, ROOF.yIn - ROOF.yOut, 120, 1, true),
+    new THREE.MeshLambertMaterial({ color: 0xe5e9ee, emissive: 0x4a525c, side: THREE.DoubleSide })); // emissive: stays light grey underneath
+  canopy.position.set(CENTER.x, (ROOF.yIn + ROOF.yOut) / 2, CENTER.z); scene.add(canopy);
+  const fascia = new THREE.Mesh(new THREE.CylinderGeometry(ROOF.inner, ROOF.inner, 1.6, 120, 1, true), new THREE.MeshLambertMaterial({ color: 0x1e293b, side: THREE.DoubleSide }));
+  fascia.position.set(CENTER.x, ROOF.yIn, CENTER.z); scene.add(fascia);
+  const COLS = 40, columns = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.45, 0.6, 1, 6), M(0x9aa4b1), COLS);
+  (() => {
+    const dm = new THREE.Object3D();
+    for (let i = 0; i < COLS; i++) {
+      const a = (i / COLS) * Math.PI * 2, r = UPPER.r1 + 1;
+      dm.position.set(CENTER.x + Math.sin(a) * r, ROOF.yOut / 2, CENTER.z + Math.cos(a) * r); dm.scale.set(1, ROOF.yOut, 1); dm.updateMatrix();
+      columns.setMatrixAt(i, dm.matrix);
+    }
+  })();
+  scene.add(columns);
+
+  // floodlights: tapered pylons with a frame of lamps that glow when the light is poor
+  const lampOn = new THREE.MeshBasicMaterial({ color: 0xfff7d6 }), lampOff = new THREE.MeshBasicMaterial({ color: 0x8b95a3 });
+  const glowTex = canvasTex(128, 128, (g, w, h) => {
+    const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    gr.addColorStop(0, "rgba(255,250,225,1)"); gr.addColorStop(0.25, "rgba(255,244,200,0.55)"); gr.addColorStop(1, "rgba(255,240,190,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  });
+  const lampBanks = [], glows = [];
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + i * Math.PI / 2, x = CENTER.x + Math.sin(a) * (UPPER.r1 + 9), z = CENTER.z + Math.cos(a) * (UPPER.r1 + 9);
+    const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.8, 70, 6), M(0x94a3b8)); pylon.position.set(x, 35, z); scene.add(pylon);
+    const head = new THREE.Group(); head.position.set(x, 72, z); head.lookAt(CENTER.x, 0, CENTER.z); scene.add(head);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(17, 10, 0.8), M(0x334155)); frame.position.z = -0.2; head.add(frame);
+    const lamps = new THREE.InstancedMesh(new THREE.BoxGeometry(2.3, 1.9, 0.5), lampOff, 24), dm = new THREE.Object3D();
+    for (let k = 0; k < 24; k++) { dm.position.set(-7 + (k % 6) * 2.8, -3.4 + Math.floor(k / 6) * 2.3, 0.4); dm.updateMatrix(); lamps.setMatrixAt(k, dm.matrix); }
+    head.add(lamps); lampBanks.push(lamps);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
+    glow.scale.set(46, 46, 1); glow.position.set(0, 0, 2); glow.visible = false; head.add(glow); glows.push(glow);
+  }
+  function setFloodlights(on) {
+    lampBanks.forEach((l) => { l.material = on ? lampOn : lampOff; });
+    glows.forEach((g) => { g.visible = on; });
+  }
 
   const crowdUniforms = { uTime: { value: 0 }, uCheer: { value: 0 } };
   let crowdCheer = 0;
-  // Fan body parts (aPart): 0 skin, 1 shirt, 2 hair/cap, 3 trousers, 4 shoes, 5 seat, 6/7 left/right sleeve, 8/9 left/right forearm
+  // Fan body parts (aPart): 0 skin, 1 shirt, 2 hair/cap, 3 trousers, 4 shoes, 5 seat, 6/7 left/right arm
   const fanMaterial = (() => {
     const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
     m.onBeforeCompile = (s) => {
@@ -438,7 +474,7 @@
         "#include <begin_vertex>",
         "  float cheer = uCheer * step(0.2, fract(iPhase * 7.0));", // most fans join in
         "  if (aPart > 5.5) {", // arms swing up around the shoulder
-        "    float side = (aPart < 6.5 || (aPart > 7.5 && aPart < 8.5)) ? -1.0 : 1.0;",
+        "    float side = aPart < 6.5 ? -1.0 : 1.0;",
         "    vec3 piv = vec3(side * 0.215, 1.05, 0.05);",
         "    float ang = cheer * (2.5 + 0.3 * sin(uTime * 11.0 + iPhase * 30.0));",
         "    float c = cos(ang), sn = sin(ang); vec3 q = transformed - piv;",
@@ -448,32 +484,29 @@
         "    transformed.y += max(0.0, sin(uTime * 9.0 + iPhase * 6.283)) * 0.3 * cheer + sin(uTime * 1.3 + iPhase * 40.0) * 0.012;",
         "    if (iEmpty > 0.5) transformed = vec3(0.0, -60.0, 0.0);", // empty seat
         "  }",
-        "  vFanCol = (aPart < 0.5 || aPart > 7.5) ? iSkin : (aPart < 1.5 || aPart > 5.5) ? iShirt : aPart < 2.5 ? iHair",
+        "  vFanCol = aPart < 0.5 ? iSkin : (aPart < 1.5 || aPart > 5.5) ? iShirt : aPart < 2.5 ? iHair",
         "    : aPart < 3.5 ? (fract(iPhase * 13.0) < 0.55 ? vec3(0.16, 0.22, 0.4) : vec3(0.1, 0.1, 0.12)) : aPart < 4.5 ? vec3(0.9) : iSeat;",
       ].join("\n"));
       s.fragmentShader = "varying vec3 vFanCol;\n" + s.fragmentShader.replace("#include <color_fragment>", "#include <color_fragment>\n  diffuseColor.rgb *= vFanCol;");
     };
     return m;
   })();
-  // A seated spectator, facing -z, sitting on the step at y = 0. `hi` = more detail for the closer, lower tier.
-  function buildFan(hi) {
+  // One seated spectator (about 140 triangles), facing -z, sitting on the step at y = 0.
+  function buildFan() {
     const parts = [];
     const add = (geo, part, pos, rot, scl) => {
       const mtx = new THREE.Matrix4().compose(V(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), V(...(scl || [1, 1, 1])));
       parts.push([(geo.index ? geo.toNonIndexed() : geo).applyMatrix4(mtx), part]);
     };
-    // kept deliberately low-poly (about 180 triangles) so thousands of fans stay cheap to draw
     add(new THREE.BoxGeometry(0.5, 0.06, 0.44), 5, [0, 0.42, 0.02]); // seat
-    add(new THREE.BoxGeometry(0.5, 0.5, 0.06), 5, [0, 0.7, 0.25], [-0.12, 0, 0]); // seat back
-    add(new THREE.BoxGeometry(0.32, 0.14, 0.42), 3, [0, 0.5, -0.14]); // thighs
-    add(new THREE.BoxGeometry(0.3, 0.42, 0.13), 3, [0, 0.26, -0.33]); // shins
+    for (const s of [-1, 1]) {
+      add(new THREE.BoxGeometry(0.13, 0.13, 0.42), 3, [s * 0.09, 0.5, -0.14]); // thigh
+      add(new THREE.BoxGeometry(0.11, 0.42, 0.12), 3, [s * 0.09, 0.26, -0.33]); // shin
+    }
     add(new THREE.CapsuleGeometry(0.17, 0.26, 1, 5), 1, [0, 0.86, 0.05], [0.08, 0, 0], [1.12, 1, 0.68]); // torso
     add(new THREE.SphereGeometry(0.115, 6, 4), 0, [0, 1.27, 0.04], null, [0.92, 1.08, 1]); // head
     add(new THREE.SphereGeometry(0.122, 6, 2, 0, Math.PI * 2, 0, Math.PI * 0.55), 2, [0, 1.29, 0.055], [-0.25, 0, 0], [0.95, 1.05, 1.05]); // hair
-    for (const s of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.09, 0.3, 0.09), s < 0 ? 6 : 7, [s * 0.215, 0.92, 0.05], [0, 0, s * 0.08]); // upper arm
-      add(new THREE.BoxGeometry(0.08, 0.08, 0.26), s < 0 ? 8 : 9, [s * 0.2, 0.77, -0.08], [-0.3, 0, 0]); // forearm on the lap
-    }
+    for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.09, 0.42, 0.09), s < 0 ? 6 : 7, [s * 0.215, 0.86, -0.02], [0.45, 0, s * 0.06]); // arm to the lap
     let n = 0; parts.forEach(([g]) => { n += g.attributes.position.count; });
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), part = new Float32Array(n);
     let o = 0;
@@ -487,9 +520,10 @@
     geo.setAttribute("aPart", new THREE.BufferAttribute(part, 1));
     return geo;
   }
+  const FAN_GEO = buildFan();
   // Fill a tier with fans, split into sectors so the parts of the crowd behind the camera aren't drawn.
-  function fillTier(tier, spacing, rowOffset, hi) {
-    const base = buildFan(hi), SECTORS = 16, sectors = Array.from({ length: SECTORS }, () => []);
+  function fillTier(tier, spacing, rowOffset) {
+    const SECTORS = 16, sectors = Array.from({ length: SECTORS }, () => []);
     const shirts = [0xef4444, 0x3b82f6, 0xfacc15, 0xf8fafc, 0x10b981, 0xf97316, 0xa855f7, 0x0ea5e9, 0xec4899, 0x1f2937, 0xf1f5f9,
       ...TEAM_KEYS.map((k) => IPL[k].c1), ...TEAM_KEYS.map((k) => IPL[k].c1)];
     const skins = [0xf1c27d, 0xe0ac69, 0xd8a47f, 0xc68e5e, 0xa86b3c, 0x8d5524, 0x6b4226];
@@ -508,7 +542,7 @@
     sectors.forEach((list) => {
       if (!list.length) return;
       const c = list.reduce((s, p) => s.add(V(p.x, p.y, p.z)), V()).divideScalar(list.length);
-      const geo = base.clone(), N = list.length;
+      const geo = FAN_GEO.clone(), N = list.length;
       const attr = (size) => new Float32Array(N * size);
       const shirt = attr(3), skin = attr(3), hr = attr(3), seat = attr(3), phase = attr(1), empty = attr(1);
       const mesh = new THREE.InstancedMesh(geo, fanMaterial, N);
@@ -529,59 +563,127 @@
       mesh.position.copy(c); scene.add(mesh);
     });
   }
-  fillTier(TIER, 0.9, 0.45, true);
+  fillTier(TIER, 1.0, 0.45);
+  fillTier(UPPER, 1.35, 0.4);
 
-  // Upper tier: one painted stand (rows of seated fans with heads, hair, shirts and arms) instead of thousands of
-  // 3D people, which keeps the game smooth. A second "arms up" painting is flicked in when the crowd cheers.
-  function paintUpperCrowd(cheering) {
-    return canvasTex(2048, 640, (g, w, h) => {
-      const rows = 24, rh = h / rows, fw = 26;
-      const shirts = ["#ef4444", "#3b82f6", "#facc15", "#f8fafc", "#10b981", "#f97316", "#a855f7", "#0ea5e9", "#ec4899", "#1f2937",
-        ...TEAM_KEYS.map((k) => hex(IPL[k].c1))];
-      const skins = ["#f1c27d", "#e0ac69", "#d8a47f", "#c68e5e", "#a86b3c", "#8d5524"];
-      const hair = ["#161616", "#161616", "#2b1d14", "#3b2618", "#5a3a22", "#8a8a8a", "#b08850"];
-      const seats = ["#1e3a8a", "#9f1239", "#166534", "#5b21b6"];
-      let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647); // same fans in both paintings
-      g.fillStyle = "#6b7280"; g.fillRect(0, 0, w, h);
-      for (let row = 0; row < rows; row++) {
-        const y0 = row * rh, base = y0 + rh;
-        g.fillStyle = "#9ca3af"; g.fillRect(0, base - 3, w, 3); // concrete step edge
-        for (let x = (row % 2) * fw / 2; x < w; x += fw) {
-          const seat = seats[Math.floor(x / 512) % seats.length], shirt = shirts[Math.floor(rnd() * shirts.length)];
-          const skin = skins[Math.floor(rnd() * skins.length)], hr = hair[Math.floor(rnd() * hair.length)], empty = rnd() < 0.07, joins = rnd() < 0.8;
-          g.fillStyle = seat; g.fillRect(x + 3, y0 + rh * 0.3, fw - 6, rh * 0.55); // seat back
-          if (empty) continue;
-          const cx = x + fw / 2, up = cheering && joins ? rh * 0.12 : 0, top = y0 + rh * 0.12 - up;
-          g.fillStyle = shirt; // shoulders and body
-          g.beginPath(); g.moveTo(cx - 8, base - 4 - up); g.quadraticCurveTo(cx - 8, top + rh * 0.42, cx, top + rh * 0.4);
-          g.quadraticCurveTo(cx + 8, top + rh * 0.42, cx + 8, base - 4 - up); g.fill();
-          g.strokeStyle = shirt; g.lineWidth = 3.2; g.lineCap = "round"; // arms: on the lap, or up in the air
-          g.beginPath();
-          if (cheering && joins) { g.moveTo(cx - 6, top + rh * 0.5); g.lineTo(cx - 9, top - rh * 0.05); g.moveTo(cx + 6, top + rh * 0.5); g.lineTo(cx + 9, top - rh * 0.05); }
-          else { g.moveTo(cx - 7, top + rh * 0.5); g.lineTo(cx - 5, base - 6); g.moveTo(cx + 7, top + rh * 0.5); g.lineTo(cx + 5, base - 6); }
-          g.stroke();
-          g.fillStyle = skin; g.beginPath(); g.arc(cx, top + rh * 0.24, 4.3, 0, Math.PI * 2); g.fill(); // head
-          g.fillStyle = hr; g.beginPath(); g.arc(cx, top + rh * 0.2, 4.4, Math.PI, Math.PI * 2); g.fill(); // hair
-        }
-      }
-    });
-  }
-  const upperSeated = paintUpperCrowd(false), upperCheer = paintUpperCrowd(true);
-  for (const t of [upperSeated, upperCheer]) { t.wrapS = THREE.RepeatWrapping; t.repeat.set(10, 1); }
-  const upperMat = new THREE.MeshLambertMaterial({ map: upperSeated, side: THREE.BackSide });
-  const upperStand = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r1, UPPER.r0, UPPER.yTop - UPPER.y0, 96, 1, true), upperMat);
-  upperStand.position.set(CENTER.x, (UPPER.y0 + UPPER.yTop) / 2, CENTER.z); scene.add(upperStand);
-  const backWall = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r1, UPPER.r1, 4, 96, 1, true), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.BackSide }));
-  backWall.position.set(CENTER.x, UPPER.yTop + 2, CENTER.z); scene.add(backWall);
-
-  for (let i = 0; i < 4; i++) {
-    const a = Math.PI / 4 + i * Math.PI / 2, x = CENTER.x + Math.sin(a) * 136, z = CENTER.z + Math.cos(a) * 136;
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.3, 62, 8), M(0x94a3b8)); pole.position.set(x, 31, z); scene.add(pole);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(12, 7, 1.2), new THREE.MeshBasicMaterial({ color: 0xfffbea }));
-    head.position.set(x, 63, z); head.lookAt(CENTER.x, 0, CENTER.z); scene.add(head);
-  }
   for (const z of [CENTER.z + BOUNDARY + 4.5, CENTER.z - BOUNDARY - 4.5]) {
     const screenM = new THREE.Mesh(new THREE.BoxGeometry(16, 7, 0.6), M(0xf8fafc)); screenM.position.set(0, 3.5, z); scene.add(screenM);
+  }
+
+  // ---------------- venues, weather and clouds
+  // Each match is played at the home ground of one of the teams, with weather drawn from that city's typical
+  // conditions. Weather changes the sky, light, fog, clouds and floodlights, and also the cricket: a wet outfield
+  // slows the ball and deadens the bounce, and cloud cover helps the quicks swing it.
+  const WEATHER = {
+    sunny: { name: "Sunny", icon: "☀️", sky: ["#1d6fd6", "#79bdf2", "#e2f2ff"], clouds: 8, cloud: 0xffffff, sun: 0.95, hemi: 0.8,
+      fog: 0xbcd9f2, fogNear: 180, fogFar: 460, temp: [30, 38], roll: 3.0, bounce: 0.42, swing: 1 },
+    partly: { name: "Partly cloudy", icon: "⛅", sky: ["#2f73c4", "#8cbfe8", "#e6f0f8"], clouds: 20, cloud: 0xf4f6f8, sun: 0.8, hemi: 0.8,
+      fog: 0xc3d6e8, fogNear: 170, fogFar: 440, temp: [27, 33], roll: 3.0, bounce: 0.42, swing: 1.2 },
+    overcast: { name: "Overcast", icon: "☁️", sky: ["#66768a", "#98a6b6", "#c8d0d9"], clouds: 40, cloud: 0xb8c0ca, sun: 0.42, hemi: 0.78,
+      fog: 0xa8b2bd, fogNear: 120, fogFar: 380, temp: [24, 29], lights: true, roll: 3.1, bounce: 0.41, swing: 1.8 },
+    drizzle: { name: "Drizzle", icon: "🌦️", sky: ["#4f5d6e", "#7e8b9a", "#aab3bd"], clouds: 44, cloud: 0x9aa3ad, sun: 0.32, hemi: 0.72,
+      fog: 0x8f99a5, fogNear: 90, fogFar: 330, temp: [21, 26], lights: true, precip: "rain", roll: 3.9, bounce: 0.34, swing: 1.6 },
+    snow: { name: "Light snow", icon: "🌨️", sky: ["#7e8ca0", "#b9c3cf", "#eceff3"], clouds: 40, cloud: 0xdde3ea, sun: 0.45, hemi: 0.85,
+      fog: 0xc9d1da, fogNear: 90, fogFar: 340, temp: [-2, 3], lights: true, precip: "snow", frost: true, roll: 4.3, bounce: 0.3, swing: 1.4 },
+  };
+  // home ground of each team: [stadium, city, weather odds]
+  const VENUES = {
+    MI: ["Wankhede Stadium", "Mumbai", { sunny: 5, partly: 3, overcast: 1, drizzle: 1 }],
+    CSK: ["MA Chidambaram Stadium", "Chennai", { sunny: 6, partly: 3, overcast: 1, drizzle: 1 }],
+    RCB: ["M. Chinnaswamy Stadium", "Bengaluru", { sunny: 3, partly: 3, overcast: 2, drizzle: 2 }],
+    KKR: ["Eden Gardens", "Kolkata", { sunny: 3, partly: 3, overcast: 2, drizzle: 2 }],
+    DC: ["Arun Jaitley Stadium", "Delhi", { sunny: 6, partly: 3, overcast: 1 }],
+    PBKS: ["HPCA Stadium", "Dharamsala", { sunny: 2, partly: 3, overcast: 2, drizzle: 1, snow: 2 }], // in the Himalayan foothills
+    RR: ["Sawai Mansingh Stadium", "Jaipur", { sunny: 7, partly: 2, overcast: 1 }],
+    SRH: ["Rajiv Gandhi Intl. Stadium", "Hyderabad", { sunny: 5, partly: 3, overcast: 1, drizzle: 1 }],
+    GT: ["Narendra Modi Stadium", "Ahmedabad", { sunny: 7, partly: 2, overcast: 1 }],
+    LSG: ["Ekana Cricket Stadium", "Lucknow", { sunny: 5, partly: 3, overcast: 1, drizzle: 1 }],
+  };
+  const PHYS = { roll: 3.0, bounce: 0.42, swing: 1 }; // set by the weather
+  function pickConditions(homeKey) {
+    const odds = VENUES[homeKey][2], total = Object.values(odds).reduce((a, b) => a + b, 0);
+    let r = Math.random() * total, weather = "sunny";
+    for (const [k, w] of Object.entries(odds)) { if ((r -= w) < 0) { weather = k; break; } }
+    const t = WEATHER[weather].temp;
+    return { venue: homeKey, weather, temp: Math.round(rand(t[0], t[1])) };
+  }
+  const conditionsText = (c) => `${VENUES[c.venue][0]}, ${VENUES[c.venue][1]} · ${WEATHER[c.weather].icon} ${WEATHER[c.weather].name}, ${c.temp}°C`;
+
+  // soft, layered cloud sprites (white tops, grey undersides) that drift slowly across the sky
+  function cloudTexture() {
+    return canvasTex(256, 128, (g, w, h) => {
+      for (let i = 0; i < 16; i++) {
+        const x = rand(48, 208), y = rand(52, 84), r = rand(20, 44);
+        const gr = g.createRadialGradient(x, y - r * 0.35, r * 0.1, x, y, r);
+        gr.addColorStop(0, "rgba(255,255,255,0.95)"); gr.addColorStop(0.55, "rgba(246,248,251,0.65)"); gr.addColorStop(1, "rgba(236,240,246,0)");
+        g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      }
+      const sh = g.createLinearGradient(0, 55, 0, h);
+      sh.addColorStop(0, "rgba(0,0,0,0)"); sh.addColorStop(1, "rgba(70,82,98,0.45)");
+      g.globalCompositeOperation = "source-atop"; g.fillStyle = sh; g.fillRect(0, 0, w, h);
+    });
+  }
+  const cloudMats = [0, 1, 2].map(() => new THREE.SpriteMaterial({ map: cloudTexture(), transparent: true, depthWrite: false, fog: false }));
+  const cloudGroup = new THREE.Group(); scene.add(cloudGroup);
+  for (let i = 0; i < 48; i++) {
+    const s = new THREE.Sprite(cloudMats[i % 3]), a = rand(0, Math.PI * 2), d = rand(240, 430), sc = rand(90, 200);
+    s.position.set(Math.sin(a) * d, rand(80, 160), Math.cos(a) * d); s.scale.set(sc, sc * rand(0.38, 0.55), 1);
+    cloudGroup.add(s);
+  }
+  const skyCache = {};
+  const skyTexture = (stops) => skyCache[stops.join()] || (skyCache[stops.join()] = canvasTex(4, 256, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, stops[0]); gr.addColorStop(0.6, stops[1]); gr.addColorStop(1, stops[2]);
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }));
+
+  // rain (falling streaks) and snow (drifting flakes) in a box that follows the camera
+  const PRECIP = { w: 70, lo: -12, hi: 30 }, RAIN_N = 1600, SNOW_N = 1400;
+  const rainOff = new Float32Array(RAIN_N * 3).map((_, i) => (i % 3 === 1 ? rand(PRECIP.lo, PRECIP.hi) : rand(-PRECIP.w / 2, PRECIP.w / 2)));
+  const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(RAIN_N * 6), 3));
+  const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xcfd9e5, transparent: true, opacity: 0.5 }));
+  const snowOff = new Float32Array(SNOW_N * 3).map((_, i) => (i % 3 === 1 ? rand(PRECIP.lo, PRECIP.hi) : rand(-PRECIP.w / 2, PRECIP.w / 2)));
+  const snowGeo = new THREE.BufferGeometry(); snowGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(SNOW_N * 3), 3));
+  const flakeTex = canvasTex(32, 32, (g) => { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); });
+  const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({ map: flakeTex, size: 0.4, transparent: true, depthWrite: false, color: 0xffffff }));
+  for (const p of [rain, snow]) { p.frustumCulled = false; p.visible = false; scene.add(p); }
+  function updatePrecip(dt) {
+    const wrap = (v, lo, hi) => (v < lo ? v + (hi - lo) : v > hi ? v - (hi - lo) : v), cam = camera.position;
+    if (rain.visible) {
+      const out = rainGeo.attributes.position.array;
+      for (let i = 0; i < RAIN_N; i++) {
+        const j = i * 3;
+        rainOff[j + 1] = wrap(rainOff[j + 1] - 26 * dt, PRECIP.lo, PRECIP.hi); rainOff[j] = wrap(rainOff[j] + 2.5 * dt, -PRECIP.w / 2, PRECIP.w / 2);
+        const x = cam.x + rainOff[j], y = cam.y + rainOff[j + 1], z = cam.z + rainOff[j + 2];
+        out.set([x, y, z, x - 0.08, y + 0.75, z], i * 6);
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+    }
+    if (snow.visible) {
+      const out = snowGeo.attributes.position.array;
+      for (let i = 0; i < SNOW_N; i++) {
+        const j = i * 3;
+        snowOff[j + 1] = wrap(snowOff[j + 1] - 1.6 * dt, PRECIP.lo, PRECIP.hi);
+        snowOff[j] = wrap(snowOff[j] + Math.sin(NOW * 0.8 + i) * 0.6 * dt, -PRECIP.w / 2, PRECIP.w / 2);
+        out[j] = cam.x + snowOff[j]; out[j + 1] = cam.y + snowOff[j + 1]; out[j + 2] = cam.z + snowOff[j + 2];
+      }
+      snowGeo.attributes.position.needsUpdate = true;
+    }
+  }
+  function applyConditions(c) {
+    const W = WEATHER[c.weather];
+    S.conditions = c;
+    scene.background = skyTexture(W.sky);
+    scene.fog.color.setHex(W.fog); scene.fog.near = W.fogNear; scene.fog.far = W.fogFar;
+    sun.intensity = W.sun; hemi.intensity = W.hemi;
+    cloudMats.forEach((m) => m.color.setHex(W.cloud));
+    cloudGroup.children.forEach((s, i) => { s.visible = i < W.clouds; });
+    rain.visible = W.precip === "rain"; snow.visible = W.precip === "snow";
+    setFloodlights(!!W.lights);
+    ground.material.emissive.setHex(W.frost ? 0x3a4440 : 0x000000); // a frosty, whitened outfield in the snow
+    Object.assign(PHYS, { roll: W.roll, bounce: W.bounce, swing: W.swing });
+    $("wx").innerHTML = `${W.icon} ${c.temp}°C <span>${esc(VENUES[c.venue][1])}</span>`;
   }
 
   // ---------------- pitch
@@ -1039,14 +1141,16 @@
     S.mode = "cpu"; S.cfg = { overs: s.overs, wkts: s.wkts, diff: s.diff };
     S.teams = [{ key: s.team, name: IPL[s.team].name, kind: "human" }, { key: cpuTeam, name: IPL[cpuTeam].name, kind: "cpu" }];
     resetMatchState();
+    applyConditions(pickConditions(pick([s.team, cpuTeam]))); // at one of the two teams' home grounds
+    const where = `<p class="muted small">🏟️ ${esc(conditionsText(S.conditions))}</p>`;
     const w = Math.random() < 0.5 ? 0 : 1, tw = S.teams[w];
     const begin = (batFirst) => { S.innings = [newInnings(batFirst, 1 - batFirst), null]; startInnings(); };
     if (tw.kind === "human") {
-      showMsg("🪙 Toss", `<p>${badgeHTML(tw.key, "sm")} <b>${esc(tw.name)}</b> won the toss.</p>`,
+      showMsg("🪙 Toss", `${where}<p>${badgeHTML(tw.key, "sm")} <b>${esc(tw.name)}</b> won the toss.</p>`,
         [{ label: "🏏 Bat first", fn: () => begin(w) }, { label: "🎯 Bowl first", fn: () => begin(1 - w) }]);
     } else {
       const batFirst = Math.random() < 0.5;
-      showMsg("🪙 Toss", `<p>${badgeHTML(tw.key, "sm")} <b>${esc(tw.name)}</b> won the toss and chose to <b>${batFirst ? "bat" : "bowl"}</b>.</p>`,
+      showMsg("🪙 Toss", `${where}<p>${badgeHTML(tw.key, "sm")} <b>${esc(tw.name)}</b> won the toss and chose to <b>${batFirst ? "bat" : "bowl"}</b>.</p>`,
         [{ label: "Start match", fn: () => begin(batFirst ? w : 1 - w) }]);
     }
   }
@@ -1128,7 +1232,7 @@
     const fast = spec.type === "fast";
     return { type: spec.type, aimX: clamp(spec.aimX, -1.4, 1.4), L: clamp(spec.L, 1.6, 10.5),
       speed: (fast ? rand(25.5, 29.5) : rand(16.5, 19)) * mul,
-      turn: fast ? rand(-0.025, 0.025) : (Math.random() < 0.5 ? -1 : 1) * rand(0.05, 0.1) };
+      turn: fast ? rand(-0.025, 0.025) * PHYS.swing : (Math.random() < 0.5 ? -1 : 1) * rand(0.05, 0.1) }; // cloud helps swing
   }
   function makeDelivery(s) {
     const fast = s.type === "fast", R = V(-0.5, 1.75, -19.4), B = V(s.aimX, 0.04, -s.L);
@@ -1162,12 +1266,20 @@
     updateHUD();
   }
   function bowlHuman() {
-    const spec = resolveSpec({ type: S.aim.type, aimX: S.aim.x + gauss() * 0.06, L: S.aim.L + gauss() * 0.2 }, 1);
+    // yorkers are the hardest ball to land: a few centimetres out and it's a full ball (or a low full toss)
+    const yorker = S.aim.L < 2.8;
+    const spec = resolveSpec({ type: S.aim.type, aimX: S.aim.x + gauss() * (yorker ? 0.1 : 0.06), L: S.aim.L + gauss() * (yorker ? 0.6 : 0.2) }, 1);
     if (S.mode === "online") send({ t: "bowl", s: spec });
     startDelivery(spec);
   }
+  // How many of the last few balls were (nearly) the same as this one: batters get used to a repeated delivery.
+  function familiarity(d) {
+    return (S.inn.seen || []).filter((b) => Math.abs(b.L - d.L) < 1.0 && Math.abs(b.x - d.xH) < 0.3 && b.type === d.type).length;
+  }
   function release() {
     S.phase = "delivery"; S.releaseAt = NOW; ball.visible = true;
+    S.del.fam = familiarity(S.del);
+    S.inn.seen = (S.inn.seen || []).concat({ L: S.del.L, x: S.del.xH, type: S.del.type }).slice(-5);
     $("speed").innerHTML = `${S.del.kmh} km/h<span>${S.del.type === "fast" ? "Pace" : "Spin"}</span>`;
     if (batKind() === "cpu") scheduleCpuSwing();
   }
@@ -1190,7 +1302,9 @@
     else { intent.aim = rand(-0.35, 0.35); intent.loft = Math.random() < aggro * (full ? 1 : 0.6); } // straight
     if (skill < 0.55 && !intent.defend && Math.random() < 0.5) { intent.aim = rand(0.3, 1.3); intent.loft = Math.random() < 0.6; } // tail-end slog
     let sd = { easy: 0.1, medium: 0.08, hard: 0.064 }[S.cfg.diff] * lerp(1.8, 0.7, skill); // openers time it far better
-    if (yorker) sd *= lerp(1.8, 1.25, skill);
+    if (yorker) sd *= lerp(1.5, 1.1, skill);
+    sd /= 1 + 0.15 * Math.min(3, d.fam || 0); // a repeated delivery is easier to read
+    if (yorker && (d.fam || 0) >= 2 && Math.random() < 0.45) { intent.defend = true; intent.aim = rand(-0.3, 0.3); } // expecting it: dig it out
     if (d.type === "spin") sd *= 0.85;
     S.cpuSwing = { at: S.releaseAt + d.T + gauss() * sd - 0.01, intent };
   }
@@ -1202,7 +1316,8 @@
     S.swung = true;
     const d = S.del, t = S.phase === "delivery" ? NOW - S.releaseAt : -1, err = t - d.T;
     let m = 1;
-    if (d.L < 2.8) m *= 0.7; else if (d.L > 8.5) m *= 0.85;
+    if (d.L < 2.8) m *= 0.8; else if (d.L > 8.5) m *= 0.85;
+    m *= 1 + 0.08 * Math.min(3, d.fam || 0); // the same ball again: the batter has its measure
     if (d.type === "spin") m *= 1.15;
     if (intent.defend) m *= 1.25; // blocking is easier to time than hitting
     const early = err < 0, ae = Math.abs(err), W = early ? [0.06, 0.12, 0.2] : [0.035, 0.065, 0.1];
@@ -1305,7 +1420,7 @@
   // The struck ball is stepped forward with gravity, a little air drag, bounces (losing energy), rolling friction,
   // the advertising boards and the stands. The whole path is worked out once, on the batter's computer, and the
   // same path is replayed on the other computer in online play.
-  const SIM_DT = 1 / 60, BALL_R = 0.075, ROLL_DECEL = 3.0, RUN_SPEED = 6.8, REACT = 0.32;
+  const SIM_DT = 1 / 60, BALL_R = 0.075, RUN_SPEED = 6.8, REACT = 0.32; // rolling friction and bounce come from PHYS (weather)
   const radial = (x, z) => Math.hypot(x - CENTER.x, z - CENTER.z);
   function simulate(P0, V0, maxT) {
     const p = P0.clone(), v = V0.clone(), pts = [p.toArray()], ev = { land: -1, rope: -1, stand: -1, out: -1, boards: -1 };
@@ -1323,7 +1438,7 @@
       if (p.y <= BALL_R) {
         p.y = BALL_R;
         if (ev.land < 0) ev.land = i;
-        if (!rolling && v.y < -1.2) { v.y = -v.y * 0.42; v.x *= 0.78; v.z *= 0.78; } else { v.y = 0; rolling = true; }
+        if (!rolling && v.y < -1.2) { v.y = -v.y * PHYS.bounce; v.x *= 0.78; v.z *= 0.78; } else { v.y = 0; rolling = true; }
       }
       if (r > BOUNDARY + 2.9 && p.y < 1.15 && floor === 0) { // thuds into the advertising boards
         if (ev.boards < 0) ev.boards = i;
@@ -1333,7 +1448,7 @@
       if (rolling) {
         const sp = Math.hypot(v.x, v.z);
         if (sp < 0.3) { pts.push(p.toArray()); break; }
-        const k = Math.max(0, sp - ROLL_DECEL * SIM_DT) / sp; v.x *= k; v.z *= k;
+        const k = Math.max(0, sp - PHYS.roll * SIM_DT) / sp; v.x *= k; v.z *= k;
       }
       pts.push(p.toArray());
     }
@@ -1974,15 +2089,17 @@
     const mine = net.room.players.find((p) => p.id === S.me.id);
     const d = { t: "start", cfg: { overs: net.room.overs, wkts: net.room.wkts },
       teams: [{ id: S.me.id, name: S.me.username, key: mine ? mine.team : S.me.team }, { id: net.peer.id, name: net.peer.name, key: net.peer.team }],
-      toss: Math.random() < 0.5 ? 0 : 1, bat: Math.random() < 0.5 };
+      toss: Math.random() < 0.5 ? 0 : 1, bat: Math.random() < 0.5, cond: pickConditions(mine ? mine.team : S.me.team) }; // host's home ground
     send(d); startOnline(d);
   }
   function startOnline(d) {
     S.mode = "online"; S.cfg = { overs: d.cfg.overs, wkts: d.cfg.wkts, diff: "medium" };
     S.teams = d.teams.map((t) => ({ key: t.key, name: t.name, kind: t.id === S.me.id ? "human" : "remote" }));
     resetMatchState(); S.net.inMatch = true;
+    if (d.cond && VENUES[d.cond.venue] && WEATHER[d.cond.weather]) applyConditions(d.cond);
     const tok = S.token, w = d.toss, batFirst = d.bat ? w : 1 - w;
-    showMsg("🪙 Toss", `<p>${badgeHTML(S.teams[w].key, "sm")} <b>${esc(S.teams[w].name)}</b> won the toss and chose to ` +
+    showMsg("🪙 Toss", `<p class="muted small">🏟️ ${esc(conditionsText(S.conditions))}</p>` +
+      `<p>${badgeHTML(S.teams[w].key, "sm")} <b>${esc(S.teams[w].name)}</b> won the toss and chose to ` +
       `<b>${batFirst === w ? "bat" : "bowl"}</b>.</p><p class="muted small">Starting…</p>`, []);
     setTimeout(() => { if (tok !== S.token) return; hideMsg(); S.innings = [newInnings(batFirst, 1 - batFirst), null]; startInnings(); }, 3000);
   }
@@ -2063,6 +2180,7 @@
   });
 
   // ================================================================ loop
+  applyConditions({ venue: "MI", weather: "sunny", temp: 32 }); // menu backdrop; each match picks its own
   resetField(); renderHome();
   let last = performance.now() / 1000;
   function loop() {
@@ -2072,7 +2190,8 @@
     update(dt); updateCamera(dt);
     crowdCheer = Math.max(0, crowdCheer - dt * 0.3); // the crowd settles down a few seconds after a cheer
     crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
-    upperMat.map = crowdCheer > 0.15 && Math.floor(NOW * 4) % 2 === 0 ? upperCheer : upperSeated; // upper tier waves when cheering
+    cloudGroup.rotation.y += dt * 0.004; // clouds drift across the sky
+    updatePrecip(dt);
     renderer.render(scene, camera);
   }
   loop();
