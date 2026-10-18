@@ -408,7 +408,7 @@
     if (r < TIER.r0) return 0;
     if (r < TIER.rEnd) return TIER.y0 + Math.floor((r - TIER.r0) / TIER.depth) * TIER.rise;
     if (r < UPPER.r0) return TIER.yEnd;
-    if (r < UPPER.r1) return UPPER.y0 + Math.floor((r - UPPER.r0) / UPPER.depth) * UPPER.rise;
+    if (r < UPPER.r1) return UPPER.y0 + ((r - UPPER.r0) / (UPPER.r1 - UPPER.r0)) * (UPPER.yTop - UPPER.y0); // upper tier slope
     if (r < UPPER.r1 + 4) return UPPER.y1; // back wall
     return -1;
   }
@@ -417,12 +417,8 @@
     const y = TIER.y0 + i * TIER.rise, r = TIER.r0 + i * TIER.depth;
     steps.push(new THREE.Vector2(r, y), new THREE.Vector2(r + TIER.depth, y));
   }
-  steps.push(new THREE.Vector2(UPPER.r0, TIER.yEnd));
-  for (let i = 0; i < UPPER.rows; i++) {
-    const y = UPPER.y0 + i * UPPER.rise, r = UPPER.r0 + i * UPPER.depth;
-    steps.push(new THREE.Vector2(r, y), new THREE.Vector2(r + UPPER.depth, y));
-  }
-  steps.push(new THREE.Vector2(UPPER.r1, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, 0));
+  // front wall of the upper tier; the upper seating itself is the painted stand below
+  steps.push(new THREE.Vector2(UPPER.r0, TIER.yEnd), new THREE.Vector2(UPPER.r0, UPPER.y0), new THREE.Vector2(UPPER.r0 + 0.5, UPPER.y0), new THREE.Vector2(UPPER.r0 + 0.5, 0));
   const tiers = new THREE.Mesh(new THREE.LatheGeometry(steps, 160), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.DoubleSide }));
   tiers.position.copy(CENTER); tiers.receiveShadow = true; scene.add(tiers);
   const roof = new THREE.Mesh(new THREE.RingGeometry(UPPER.r1 - 20, UPPER.r1 + 2, 120), new THREE.MeshLambertMaterial({ color: 0xe5e7eb, side: THREE.DoubleSide }));
@@ -466,22 +462,17 @@
       const mtx = new THREE.Matrix4().compose(V(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), V(...(scl || [1, 1, 1])));
       parts.push([(geo.index ? geo.toNonIndexed() : geo).applyMatrix4(mtx), part]);
     };
-    const r = hi ? 6 : 4;
+    // kept deliberately low-poly (about 180 triangles) so thousands of fans stay cheap to draw
     add(new THREE.BoxGeometry(0.5, 0.06, 0.44), 5, [0, 0.42, 0.02]); // seat
     add(new THREE.BoxGeometry(0.5, 0.5, 0.06), 5, [0, 0.7, 0.25], [-0.12, 0, 0]); // seat back
+    add(new THREE.BoxGeometry(0.32, 0.14, 0.42), 3, [0, 0.5, -0.14]); // thighs
+    add(new THREE.BoxGeometry(0.3, 0.42, 0.13), 3, [0, 0.26, -0.33]); // shins
+    add(new THREE.CapsuleGeometry(0.17, 0.26, 1, 5), 1, [0, 0.86, 0.05], [0.08, 0, 0], [1.12, 1, 0.68]); // torso
+    add(new THREE.SphereGeometry(0.115, 6, 4), 0, [0, 1.27, 0.04], null, [0.92, 1.08, 1]); // head
+    add(new THREE.SphereGeometry(0.122, 6, 2, 0, Math.PI * 2, 0, Math.PI * 0.55), 2, [0, 1.29, 0.055], [-0.25, 0, 0], [0.95, 1.05, 1.05]); // hair
     for (const s of [-1, 1]) {
-      add(new THREE.CapsuleGeometry(0.075, 0.3, 1, r), 3, [s * 0.1, 0.5, -0.14], [Math.PI / 2, 0, 0]); // thigh
-      add(new THREE.BoxGeometry(0.12, 0.42, 0.13), 3, [s * 0.1, 0.26, -0.33]); // shin
-      if (hi) add(new THREE.BoxGeometry(0.11, 0.08, 0.22), 4, [s * 0.1, 0.04, -0.38]); // shoe
-    }
-    add(new THREE.CapsuleGeometry(0.17, 0.26, hi ? 2 : 1, hi ? 7 : 5), 1, [0, 0.86, 0.05], [0.08, 0, 0], [1.12, 1, 0.68]); // torso
-    if (hi) add(new THREE.CylinderGeometry(0.05, 0.055, 0.12, 6), 0, [0, 1.12, 0.05]); // neck
-    add(new THREE.SphereGeometry(0.115, hi ? 9 : 6, hi ? 6 : 4), 0, [0, 1.27, 0.04], null, [0.92, 1.08, 1]); // head
-    add(new THREE.SphereGeometry(0.122, hi ? 9 : 6, hi ? 4 : 2, 0, Math.PI * 2, 0, Math.PI * 0.55), 2, [0, 1.29, 0.055], [-0.25, 0, 0], [0.95, 1.05, 1.05]); // hair
-    if (hi) add(new THREE.BoxGeometry(0.03, 0.045, 0.04), 0, [0, 1.25, -0.075]); // nose
-    for (const s of [-1, 1]) {
-      add(new THREE.CapsuleGeometry(0.05, 0.2, 1, r), s < 0 ? 6 : 7, [s * 0.215, 0.92, 0.05], [0, 0, s * 0.08]); // upper arm
-      add(new THREE.CapsuleGeometry(0.043, 0.2, 1, r), s < 0 ? 8 : 9, [s * 0.2, 0.78, -0.07], [Math.PI / 2 - 0.3, 0, 0]); // forearm on the lap
+      add(new THREE.BoxGeometry(0.09, 0.3, 0.09), s < 0 ? 6 : 7, [s * 0.215, 0.92, 0.05], [0, 0, s * 0.08]); // upper arm
+      add(new THREE.BoxGeometry(0.08, 0.08, 0.26), s < 0 ? 8 : 9, [s * 0.2, 0.77, -0.08], [-0.3, 0, 0]); // forearm on the lap
     }
     let n = 0; parts.forEach(([g]) => { n += g.attributes.position.count; });
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), part = new Float32Array(n);
@@ -534,11 +525,54 @@
         geo.setAttribute(name, new THREE.InstancedBufferAttribute(arr, size));
       }
       geo.boundingSphere = new THREE.Sphere(V(), radius + 2); // so whole sectors outside the view are skipped
+      mesh.frustumCulled = true; // InstancedMesh turns this off by default; on, sectors off-screen aren't drawn at all
       mesh.position.copy(c); scene.add(mesh);
     });
   }
-  fillTier(TIER, 0.8, 0.45, true);
-  fillTier(UPPER, 1.05, 0.4, false);
+  fillTier(TIER, 0.9, 0.45, true);
+
+  // Upper tier: one painted stand (rows of seated fans with heads, hair, shirts and arms) instead of thousands of
+  // 3D people, which keeps the game smooth. A second "arms up" painting is flicked in when the crowd cheers.
+  function paintUpperCrowd(cheering) {
+    return canvasTex(2048, 640, (g, w, h) => {
+      const rows = 24, rh = h / rows, fw = 26;
+      const shirts = ["#ef4444", "#3b82f6", "#facc15", "#f8fafc", "#10b981", "#f97316", "#a855f7", "#0ea5e9", "#ec4899", "#1f2937",
+        ...TEAM_KEYS.map((k) => hex(IPL[k].c1))];
+      const skins = ["#f1c27d", "#e0ac69", "#d8a47f", "#c68e5e", "#a86b3c", "#8d5524"];
+      const hair = ["#161616", "#161616", "#2b1d14", "#3b2618", "#5a3a22", "#8a8a8a", "#b08850"];
+      const seats = ["#1e3a8a", "#9f1239", "#166534", "#5b21b6"];
+      let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647); // same fans in both paintings
+      g.fillStyle = "#6b7280"; g.fillRect(0, 0, w, h);
+      for (let row = 0; row < rows; row++) {
+        const y0 = row * rh, base = y0 + rh;
+        g.fillStyle = "#9ca3af"; g.fillRect(0, base - 3, w, 3); // concrete step edge
+        for (let x = (row % 2) * fw / 2; x < w; x += fw) {
+          const seat = seats[Math.floor(x / 512) % seats.length], shirt = shirts[Math.floor(rnd() * shirts.length)];
+          const skin = skins[Math.floor(rnd() * skins.length)], hr = hair[Math.floor(rnd() * hair.length)], empty = rnd() < 0.07, joins = rnd() < 0.8;
+          g.fillStyle = seat; g.fillRect(x + 3, y0 + rh * 0.3, fw - 6, rh * 0.55); // seat back
+          if (empty) continue;
+          const cx = x + fw / 2, up = cheering && joins ? rh * 0.12 : 0, top = y0 + rh * 0.12 - up;
+          g.fillStyle = shirt; // shoulders and body
+          g.beginPath(); g.moveTo(cx - 8, base - 4 - up); g.quadraticCurveTo(cx - 8, top + rh * 0.42, cx, top + rh * 0.4);
+          g.quadraticCurveTo(cx + 8, top + rh * 0.42, cx + 8, base - 4 - up); g.fill();
+          g.strokeStyle = shirt; g.lineWidth = 3.2; g.lineCap = "round"; // arms: on the lap, or up in the air
+          g.beginPath();
+          if (cheering && joins) { g.moveTo(cx - 6, top + rh * 0.5); g.lineTo(cx - 9, top - rh * 0.05); g.moveTo(cx + 6, top + rh * 0.5); g.lineTo(cx + 9, top - rh * 0.05); }
+          else { g.moveTo(cx - 7, top + rh * 0.5); g.lineTo(cx - 5, base - 6); g.moveTo(cx + 7, top + rh * 0.5); g.lineTo(cx + 5, base - 6); }
+          g.stroke();
+          g.fillStyle = skin; g.beginPath(); g.arc(cx, top + rh * 0.24, 4.3, 0, Math.PI * 2); g.fill(); // head
+          g.fillStyle = hr; g.beginPath(); g.arc(cx, top + rh * 0.2, 4.4, Math.PI, Math.PI * 2); g.fill(); // hair
+        }
+      }
+    });
+  }
+  const upperSeated = paintUpperCrowd(false), upperCheer = paintUpperCrowd(true);
+  for (const t of [upperSeated, upperCheer]) { t.wrapS = THREE.RepeatWrapping; t.repeat.set(10, 1); }
+  const upperMat = new THREE.MeshLambertMaterial({ map: upperSeated, side: THREE.BackSide });
+  const upperStand = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r1, UPPER.r0, UPPER.yTop - UPPER.y0, 96, 1, true), upperMat);
+  upperStand.position.set(CENTER.x, (UPPER.y0 + UPPER.yTop) / 2, CENTER.z); scene.add(upperStand);
+  const backWall = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r1, UPPER.r1, 4, 96, 1, true), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.BackSide }));
+  backWall.position.set(CENTER.x, UPPER.yTop + 2, CENTER.z); scene.add(backWall);
 
   for (let i = 0; i < 4; i++) {
     const a = Math.PI / 4 + i * Math.PI / 2, x = CENTER.x + Math.sin(a) * 136, z = CENTER.z + Math.cos(a) * 136;
@@ -2038,6 +2072,7 @@
     update(dt); updateCamera(dt);
     crowdCheer = Math.max(0, crowdCheer - dt * 0.3); // the crowd settles down a few seconds after a cheer
     crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
+    upperMat.map = crowdCheer > 0.15 && Math.floor(NOW * 4) % 2 === 0 ? upperCheer : upperSeated; // upper tier waves when cheering
     renderer.render(scene, camera);
   }
   loop();
