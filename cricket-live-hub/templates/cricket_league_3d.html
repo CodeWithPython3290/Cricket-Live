@@ -340,10 +340,25 @@
 
   // ================================================================ renderer + scene
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const MAX_PR = Math.min(window.devicePixelRatio, 1.5);
+  renderer.setPixelRatio(MAX_PR);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  // If the computer can't keep up (under ~45 fps for a few seconds), draw at a slightly lower resolution.
+  const quality = { pr: MAX_PR, frames: 0, time: 0, slow: 0, last: 0 };
+  function adaptQuality() {
+    const now = performance.now() / 1000, el = now - quality.last; quality.last = now;
+    if (el > 0.25 || now < 4) return; // a hidden tab or a one-off hitch isn't lag; the first seconds are loading
+    quality.frames++; quality.time += el;
+    if (quality.time < 2) return;
+    const fps = quality.frames / quality.time; quality.frames = 0; quality.time = 0;
+    quality.slow = fps < 45 ? quality.slow + 1 : 0;
+    if (quality.slow >= 2 && quality.pr > 0.8) {
+      quality.pr = Math.max(0.8, quality.pr - 0.2); quality.slow = 0;
+      renderer.setPixelRatio(quality.pr); renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  }
   document.body.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -514,21 +529,25 @@
   })();
 
   // team flags along the roof edge, waving in the wind
+  // (all the poles are one instanced mesh and all the flags another, so they cost two draw calls)
   const flags = [];
-  (() => {
-    const pole = new THREE.CylinderGeometry(0.06, 0.06, 3.2, 5), cloth = new THREE.PlaneGeometry(1.8, 1.1);
-    let n = 0;
-    for (let a = 0.1; a < Math.PI * 2; a += 0.21) {
-      if (inRoofGap(a)) continue;
-      const key = TEAM_KEYS[n++ % TEAM_KEYS.length], t = IPL[key], r = ROOF.inner + 0.6;
-      const g = new THREE.Group(); g.position.set(CENTER.x + Math.sin(a) * r, ROOF.yIn + 0.8, CENTER.z + Math.cos(a) * r);
-      g.add(new THREE.Mesh(pole, M(0xd1d5db))); g.children[0].position.y = 1.6;
-      const tex = canvasTex(64, 40, (c, w, h) => { c.fillStyle = hex(t.c1); c.fillRect(0, 0, w, h); c.fillStyle = hex(t.c2); c.fillRect(0, h * 0.7, w, h * 0.3); });
-      const f = new THREE.Mesh(cloth, new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide })); f.position.set(0.9, 2.65, 0);
-      const swing = new THREE.Group(); swing.add(f); g.add(swing); g.rotation.y = a; swing.userData.base = 0;
-      scene.add(g); flags.push(swing);
-    }
-  })();
+  for (let a = 0.1; a < Math.PI * 2; a += 0.21) if (!inRoofGap(a)) flags.push(a);
+  const flagPoles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 5), M(0xd1d5db), flags.length);
+  const flagCloth = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.8, 1.1).translate(0.9, 0, 0),
+    new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), flags.length);
+  const flagDummy = new THREE.Object3D(), flagAt = (a, y) => flagDummy.position.set(CENTER.x + Math.sin(a) * (ROOF.inner + 0.6), y, CENTER.z + Math.cos(a) * (ROOF.inner + 0.6));
+  flags.forEach((a, i) => {
+    flagAt(a, ROOF.yIn + 2.4); flagDummy.rotation.set(0, 0, 0); flagDummy.updateMatrix(); flagPoles.setMatrixAt(i, flagDummy.matrix);
+    flagCloth.setColorAt(i, new THREE.Color(IPL[TEAM_KEYS[i % TEAM_KEYS.length]].c1));
+  });
+  function waveFlags(t) {
+    flags.forEach((a, i) => {
+      flagAt(a, ROOF.yIn + 3.45); flagDummy.rotation.set(0, a + Math.sin(t * 2.5 + i * 1.7) * 0.4, 0); flagDummy.updateMatrix();
+      flagCloth.setMatrixAt(i, flagDummy.matrix);
+    });
+    flagCloth.instanceMatrix.needsUpdate = true;
+  }
+  waveFlags(0); scene.add(flagPoles, flagCloth);
 
   // dugouts on either side of the ground, just inside the advertising boards
   for (const a of [Math.PI / 2 + 0.25, -Math.PI / 2 - 0.25]) {
@@ -596,21 +615,30 @@
     };
     return m;
   })();
-  // One seated spectator (about 140 triangles), facing -z, sitting on the step at y = 0.
-  function buildFan() {
+  // One seated spectator, facing -z, sitting on the step at y = 0. The far-away version (lo) has both legs in one
+  // block, a box torso and a coarser head: about half the triangles, and it looks the same from across the ground.
+  function buildFan(lo) {
     const parts = [];
     const add = (geo, part, pos, rot, scl) => {
       const mtx = new THREE.Matrix4().compose(V(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), V(...(scl || [1, 1, 1])));
       parts.push([(geo.index ? geo.toNonIndexed() : geo).applyMatrix4(mtx), part]);
     };
     add(new THREE.BoxGeometry(0.5, 0.06, 0.44), 5, [0, 0.42, 0.02]); // seat
-    for (const s of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.13, 0.13, 0.42), 3, [s * 0.09, 0.5, -0.14]); // thigh
-      add(new THREE.BoxGeometry(0.11, 0.42, 0.12), 3, [s * 0.09, 0.26, -0.33]); // shin
+    if (lo) {
+      add(new THREE.BoxGeometry(0.3, 0.13, 0.42), 3, [0, 0.5, -0.14]); // thighs
+      add(new THREE.BoxGeometry(0.28, 0.42, 0.12), 3, [0, 0.26, -0.33]); // shins
+      add(new THREE.BoxGeometry(0.36, 0.5, 0.25), 1, [0, 0.86, 0.05], [0.08, 0, 0]); // torso
+      add(new THREE.SphereGeometry(0.115, 5, 3), 0, [0, 1.27, 0.04], null, [0.92, 1.08, 1]); // head
+      add(new THREE.SphereGeometry(0.122, 5, 1, 0, Math.PI * 2, 0, Math.PI * 0.5), 2, [0, 1.29, 0.055], [-0.25, 0, 0]); // hair
+    } else {
+      for (const s of [-1, 1]) {
+        add(new THREE.BoxGeometry(0.13, 0.13, 0.42), 3, [s * 0.09, 0.5, -0.14]); // thigh
+        add(new THREE.BoxGeometry(0.11, 0.42, 0.12), 3, [s * 0.09, 0.26, -0.33]); // shin
+      }
+      add(new THREE.CapsuleGeometry(0.17, 0.26, 1, 5), 1, [0, 0.86, 0.05], [0.08, 0, 0], [1.12, 1, 0.68]); // torso
+      add(new THREE.SphereGeometry(0.115, 6, 4), 0, [0, 1.27, 0.04], null, [0.92, 1.08, 1]); // head
+      add(new THREE.SphereGeometry(0.122, 6, 2, 0, Math.PI * 2, 0, Math.PI * 0.55), 2, [0, 1.29, 0.055], [-0.25, 0, 0], [0.95, 1.05, 1.05]); // hair
     }
-    add(new THREE.CapsuleGeometry(0.17, 0.26, 1, 5), 1, [0, 0.86, 0.05], [0.08, 0, 0], [1.12, 1, 0.68]); // torso
-    add(new THREE.SphereGeometry(0.115, 6, 4), 0, [0, 1.27, 0.04], null, [0.92, 1.08, 1]); // head
-    add(new THREE.SphereGeometry(0.122, 6, 2, 0, Math.PI * 2, 0, Math.PI * 0.55), 2, [0, 1.29, 0.055], [-0.25, 0, 0], [0.95, 1.05, 1.05]); // hair
     for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.09, 0.42, 0.09), s < 0 ? 6 : 7, [s * 0.215, 0.86, -0.02], [0.45, 0, s * 0.06]); // arm to the lap
     let n = 0; parts.forEach(([g]) => { n += g.attributes.position.count; });
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), part = new Float32Array(n);
@@ -625,10 +653,13 @@
     geo.setAttribute("aPart", new THREE.BufferAttribute(part, 1));
     return geo;
   }
-  const FAN_GEO = buildFan();
+  const FAN_GEO = buildFan(false), FAN_LO = buildFan(true), crowdLods = [], CROWD_LOD_DIST = 105;
+  function updateCrowdLod() { // far-away sectors switch to the simpler fan
+    for (const s of crowdLods) s.mesh.geometry = camera.position.distanceTo(s.c) > CROWD_LOD_DIST ? s.lo : s.hi;
+  }
   // Fill a tier with fans, split into sectors so the parts of the crowd behind the camera aren't drawn.
   function fillTier(tier, spacing, rowOffset) {
-    const SECTORS = 16, sectors = Array.from({ length: SECTORS }, () => []);
+    const SECTORS = 24, sectors = Array.from({ length: SECTORS }, () => []);
     const shirts = [0xef4444, 0x3b82f6, 0xfacc15, 0xf8fafc, 0x10b981, 0xf97316, 0xa855f7, 0x0ea5e9, 0xec4899, 0x1f2937, 0xf1f5f9,
       ...TEAM_KEYS.map((k) => IPL[k].c1), ...TEAM_KEYS.map((k) => IPL[k].c1)];
     const skins = [0xf1c27d, 0xe0ac69, 0xd8a47f, 0xc68e5e, 0xa86b3c, 0x8d5524, 0x6b4226];
@@ -651,7 +682,7 @@
     sectors.forEach((list) => {
       if (!list.length) return;
       const c = list.reduce((s, p) => s.add(V(p.x, p.y, p.z)), V()).divideScalar(list.length);
-      const geo = FAN_GEO.clone(), N = list.length;
+      const geo = FAN_GEO.clone(), lo = FAN_LO.clone(), N = list.length;
       const attr = (size) => new Float32Array(N * size);
       const shirt = attr(3), skin = attr(3), hr = attr(3), seat = attr(3), phase = attr(1), empty = attr(1);
       const mesh = new THREE.InstancedMesh(geo, fanMaterial, N);
@@ -665,11 +696,13 @@
         phase[i] = Math.random(); empty[i] = Math.random() < 0.08 ? 1 : 0;
       });
       for (const [name, arr, size] of [["iShirt", shirt, 3], ["iSkin", skin, 3], ["iHair", hr, 3], ["iSeat", seat, 3], ["iPhase", phase, 1], ["iEmpty", empty, 1]]) {
-        geo.setAttribute(name, new THREE.InstancedBufferAttribute(arr, size));
+        const at = new THREE.InstancedBufferAttribute(arr, size); geo.setAttribute(name, at); lo.setAttribute(name, at);
       }
       geo.boundingSphere = new THREE.Sphere(V(), radius + 2); // so whole sectors outside the view are skipped
+      lo.boundingSphere = geo.boundingSphere;
       mesh.frustumCulled = true; // InstancedMesh turns this off by default; on, sectors off-screen aren't drawn at all
       mesh.position.copy(c); scene.add(mesh);
+      crowdLods.push({ mesh, hi: geo, lo, c: c.clone() });
     });
   }
   fillTier(TIER, 1.0, 0.45);
@@ -714,7 +747,33 @@
     let r = Math.random() * total, weather = "sunny";
     for (const [k, w] of Object.entries(odds)) { if ((r -= w) < 0) { weather = k; break; } }
     const t = WEATHER[weather].temp;
-    return { venue: homeKey, weather, temp: Math.round(rand(t[0], t[1])) };
+    return { venue: homeKey, weather, temp: Math.round(rand(t[0], t[1])), seed: Math.floor(Math.random() * 1e9), cold: weather === "snow" };
+  }
+  // The weather moves on during the match: at the end of each over the temperature drifts a degree or so, and now and
+  // then the sky changes one step (sunny ⇄ partly cloudy ⇄ overcast ⇄ drizzle, or snow on a cold day). It's driven by
+  // the match seed, so in online play both computers see the same change at the same time.
+  const WX_NEXT = { sunny: ["partly"], partly: ["sunny", "overcast"], overcast: ["partly", "drizzle", "snow"], drizzle: ["overcast"], snow: ["overcast"] };
+  const COLD_TEMP = [-2, 5];
+  function seeded(n) { let x = Math.imul((n | 0) ^ 0x9e3779b9, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16; return (x >>> 0) / 4294967296; }
+  function weatherTick(over) { // returns a message when the sky changes
+    const c = S.conditions; if (!c) return "";
+    const key = (c.seed || 1) + S.cur * 9973 + over * 131, odds = VENUES[c.venue][2];
+    let weather = c.weather;
+    // about one or two changes a match, however many overs it is
+    if (seeded(key) < clamp(1.5 / (2 * S.cfg.overs), 0.04, 0.35)) {
+      // only weather this ground gets, and snow only on a cold day (rain stays as drizzle in the warm)
+      const opts = WX_NEXT[weather].filter((w) => odds[w] && (w === "snow" ? c.cold : !(c.cold && w === "drizzle")));
+      if (opts.length) weather = opts[Math.floor(seeded(key + 1) * opts.length)];
+    }
+    const t = c.cold ? COLD_TEMP : WEATHER[weather].temp;
+    let temp = clamp(c.temp, t[0], t[1]); // a new sky brings its own temperature range
+    if (temp === c.temp) temp = clamp(temp + Math.round(seeded(key + 2) * 2 - 1), t[0] - 1, t[1] + 1);
+    if (weather === c.weather && temp === c.temp) return "";
+    applyConditions(Object.assign({}, c, { weather, temp }));
+    if (weather === c.weather) return "";
+    const W = WEATHER[weather];
+    return `${W.icon} ${{ sunny: "The sun's out", partly: "Clouds rolling in", overcast: "It's clouded over", drizzle: "Drizzle starting", snow: "Snow falling" }[weather]}${
+      weather === "overcast" && (c.weather === "drizzle" || c.weather === "snow") ? " (it's stopped)" : ""}, ${temp}°C`;
   }
   const conditionsText = (c) => `${VENUES[c.venue][0]}, ${VENUES[c.venue][1]} · ${WEATHER[c.weather].icon} ${WEATHER[c.weather].name}, ${c.temp}°C`;
 
@@ -765,7 +824,7 @@
         const j = i * 3;
         rainOff[j + 1] = wrap(rainOff[j + 1] - 26 * dt, PRECIP.lo, PRECIP.hi); rainOff[j] = wrap(rainOff[j] + 2.5 * dt, -PRECIP.w / 2, PRECIP.w / 2);
         const x = cam.x + rainOff[j], y = cam.y + rainOff[j + 1], z = cam.z + rainOff[j + 2];
-        out.set([x, y, z, x - 0.08, y + 0.75, z], i * 6);
+        const o = i * 6; out[o] = x; out[o + 1] = y; out[o + 2] = z; out[o + 3] = x - 0.08; out[o + 4] = y + 0.75; out[o + 5] = z;
       }
       rainGeo.attributes.position.needsUpdate = true;
     }
@@ -1088,7 +1147,18 @@
       addPart(kn, GEO.sole, u.accentM, 0, footY + 0.022, -0.05, 1.22, 1.0, 0.3, false).rotation.x = Math.PI / 2;
       u["sh" + s] = sh; u["el" + s] = el; u["hip" + s] = hp; u["kn" + s] = kn;
     }
-    root.userData = u; scene.add(root); stand(root); return root;
+    // outlines and the small face/helmet details: hidden when the player is far away, where they'd be under a pixel
+    u.details = []; u.far = false;
+    root.traverse((m) => { if (m.isMesh && (m.material === OUTLINE || m.material === OUTLINE_BOX || DETAIL_GEOS.has(m.geometry))) u.details.push(m); });
+    root.userData = u; scene.add(root); stand(root); characters.push(root); return root;
+  }
+  const characters = [], DETAIL_DIST = 40;
+  const DETAIL_GEOS = new Set([GEO.eye, GEO.pupil, GEO.shine, GEO.brow, GEO.mouth, GEO.nose, GEO.ear, GEO.bar, GEO.vbar, GEO.belt, GEO.collar, GEO.sole]);
+  function updateCharacterLod() {
+    for (const p of characters) {
+      const u = p.userData, far = camera.position.distanceTo(p.position) > DETAIL_DIST;
+      if (far !== u.far) { u.far = far; for (const m of u.details) m.visible = !far; }
+    }
   }
   function stand(p) {
     const u = p.userData;
@@ -1695,6 +1765,21 @@
     }
     return null;
   }
+  // A leaping catch on the boundary: the last point before the rope where the ball is above head height but still
+  // within a jump (1.6 to 2.9 m), and a fielder can get there in time.
+  const SCREAMER_RATE = 0.7;
+  function boundaryCatch(pts, ropeI) {
+    for (let i = ropeI - 1; i > Math.max(1, ropeI - 90); i--) {
+      const [x, y, z] = pts[i], t = i * SIM_DT;
+      if (radial(x, z) > BOUNDARY - 0.9 || y < 1.6) continue;
+      if (y > 2.9) return null; // further back it's only higher
+      for (let idx = 0; idx < fielders.length; idx++) {
+        const hm = fielders[idx].userData.home;
+        if (Math.hypot(hm.x - x, hm.z - z) <= 1.2 + RUN_SPEED * Math.max(0, t - REACT)) return { i, idx };
+      }
+    }
+    return null;
+  }
 
   function computeHit(h) {
     const d = S.del, o = computeOutcome(h);
@@ -1723,7 +1808,17 @@
       }
     }
     // six = it crossed the rope on the full; if it bounced inside the rope first (even into the stands) it's four
-    const six = !o.out && !o.dropped && ev.rope >= 0 && (ev.land < 0 || ev.land > ev.rope);
+    let six = !o.out && !o.dropped && ev.rope >= 0 && (ev.land < 0 || ev.land > ev.rope);
+    // once in a while a fielder on the rope leaps and plucks a six out of the air
+    if (six && Math.random() < SCREAMER_RATE) {
+      const c = boundaryCatch(pts, ev.rope);
+      if (c) {
+        six = false; o.out = "caught"; o.catcher = c.idx; o.screamer = true; who = c.idx; eventI = c.i;
+        const [x, y, z] = pts[c.i], fall = [];
+        for (let k = 1; k <= 24; k++) fall.push([x, lerp(y, 1.15, k / 24), z]); // brought down into the body on landing
+        pts = pts.slice(0, c.i + 1).concat(fall);
+      }
+    }
     // along the ground: the first fielder who can reach it stops it 90% of the time (a misfield lets it run on)
     if (!o.out && !o.dropped && !six) {
       let from = o.aerial ? Math.max(1, ev.land) : 1;
@@ -1771,7 +1866,8 @@
       if (o.out || o.dropped) {
         // stand just behind where the ball comes down, facing it, so it drops into the hands rather than onto the head
         target = cp.clone().addScaledVector(inc, 0.42).setY(0);
-        S.catchFx = { f, p: cp, face: cp.clone().addScaledVector(inc, -4), lat: V(-inc.z, 0, inc.x).multiplyScalar(0.07), t: NOW + h.eventT, drop: o.dropped };
+        S.catchFx = { f, p: cp, face: cp.clone().addScaledVector(inc, -4), lat: V(-inc.z, 0, inc.x).multiplyScalar(0.07), t: NOW + h.eventT, drop: o.dropped,
+          jump: o.screamer ? Math.max(0.3, cp.y - 1.45) : 0 }; // high enough to take it in front of the face
       } else target = cp.clone().setY(0);
       speed = clamp(f.position.distanceTo(target) / Math.max(0.25, h.eventT - REACT), 1.5, 9.5);
     } else { // nobody reached it: the nearest fielder chases it down
@@ -1790,7 +1886,11 @@
   const capFirst = (s) => s[0].toUpperCase() + s.slice(1);
   function announce(o) {
     const st = S.inn.batters[S.inn.striker];
-    if (o.out) {
+    if (o.out && o.screamer) {
+      sfx.wicket(); crowdCheer = 1; S.celebrate = { t0: NOW };
+      showFlash("WHAT A CATCH!", "#ef4444", `${capFirst(fielderName(o.catcher))} leaps on the rope! ${st.name} ${st.runs} (${st.balls + 1})`);
+      boardEvent("STUNNER!", `${st.name} c ${fielderName(o.catcher)}`, "#ef4444");
+    } else if (o.out) {
       sfx.wicket(); crowdCheer = 0.7; S.celebrate = { t0: NOW };
       showFlash("CAUGHT!", "#ef4444", `${st.name} c ${fielderName(o.catcher)} ${st.runs} (${st.balls + 1})`);
       boardEvent("OUT!", `${st.name} c ${fielderName(o.catcher)}`, "#ef4444");
@@ -1855,7 +1955,8 @@
       if (!r.wide && inn.balls % 6 === 0) {
         swapStrike(); S.overDone = true;
         const overRuns = S.thisOver.reduce((s, b) => s + (typeof b === "number" ? b : b === "Wd" ? 1 : 0), 0);
-        showToast(`End of over ${inn.balls / 6} · ${overRuns} run${overRuns === 1 ? "" : "s"}`);
+        const wx = weatherTick(inn.balls / 6);
+        showToast(`End of over ${inn.balls / 6} · ${overRuns} run${overRuns === 1 ? "" : "s"}${wx ? " · " + wx : ""}`);
       }
       nextBall();
     };
@@ -1999,8 +2100,13 @@
       const cf = S.catchFx, f = cf.f, U = f.userData;
       if (!S.chaser || f.position.distanceTo(S.chaser.target) <= 0.35) stand(f);
       face(f, cf.face.x, cf.face.z);
+      if (cf.jump) { // a leap on the rope: up to meet it, then down with the ball in both hands
+        const k = (NOW - cf.t) / 0.4;
+        f.position.y = Math.abs(k) < 1 ? cf.jump * (1 - k * k) : 0;
+      }
       f.updateMatrixWorld(true);
-      const a = cf.p.clone().add(cf.lat), b = cf.p.clone().sub(cf.lat), sL = U.shL.getWorldPosition(V());
+      const hp = cf.jump && NOW > cf.t ? ball.position : cf.p;
+      const a = hp.clone().add(cf.lat), b = hp.clone().sub(cf.lat), sL = U.shL.getWorldPosition(V());
       const [tl, tr] = sL.distanceTo(a) < sL.distanceTo(b) ? [a, b] : [b, a];
       solveArm(U, "L", tl, V(-1, -1, 0.3)); solveArm(U, "R", tr, V(1, -1, 0.3));
     }
@@ -2440,7 +2546,7 @@
     crowdCheer = Math.max(0, crowdCheer - dt * 0.3); // the crowd settles down a few seconds after a cheer
     crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
     cloudGroup.rotation.y += dt * 0.004; // clouds drift across the sky
-    flags.forEach((f, i) => { f.rotation.y = Math.sin(NOW * 2.5 + i * 1.7) * 0.4; });
+    waveFlags(NOW); updateCrowdLod(); updateCharacterLod(); adaptQuality();
     updatePrecip(dt);
     if (boardMsg && NOW < boardMsg.until + 0.3 && NOW - boardDrawnAt > 0.2) drawBoard(); // flashing, then back to the score
     renderer.render(scene, camera);
