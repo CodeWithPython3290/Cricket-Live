@@ -340,25 +340,10 @@
 
   // ================================================================ renderer + scene
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  const MAX_PR = Math.min(window.devicePixelRatio, 1.5);
-  renderer.setPixelRatio(MAX_PR);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
-  // If the computer can't keep up (under ~45 fps for a few seconds), draw at a slightly lower resolution.
-  const quality = { pr: MAX_PR, frames: 0, time: 0, slow: 0, last: 0 };
-  function adaptQuality() {
-    const now = performance.now() / 1000, el = now - quality.last; quality.last = now;
-    if (el > 0.25 || now < 4) return; // a hidden tab or a one-off hitch isn't lag; the first seconds are loading
-    quality.frames++; quality.time += el;
-    if (quality.time < 2) return;
-    const fps = quality.frames / quality.time; quality.frames = 0; quality.time = 0;
-    quality.slow = fps < 45 ? quality.slow + 1 : 0;
-    if (quality.slow >= 2 && quality.pr > 0.8) {
-      quality.pr = Math.max(0.8, quality.pr - 0.2); quality.slow = 0;
-      renderer.setPixelRatio(quality.pr); renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-  }
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -1147,18 +1132,7 @@
       addPart(kn, GEO.sole, u.accentM, 0, footY + 0.022, -0.05, 1.22, 1.0, 0.3, false).rotation.x = Math.PI / 2;
       u["sh" + s] = sh; u["el" + s] = el; u["hip" + s] = hp; u["kn" + s] = kn;
     }
-    // outlines and the small face/helmet details: hidden when the player is far away, where they'd be under a pixel
-    u.details = []; u.far = false;
-    root.traverse((m) => { if (m.isMesh && (m.material === OUTLINE || m.material === OUTLINE_BOX || DETAIL_GEOS.has(m.geometry))) u.details.push(m); });
-    root.userData = u; scene.add(root); stand(root); characters.push(root); return root;
-  }
-  const characters = [], DETAIL_DIST = 40;
-  const DETAIL_GEOS = new Set([GEO.eye, GEO.pupil, GEO.shine, GEO.brow, GEO.mouth, GEO.nose, GEO.ear, GEO.bar, GEO.vbar, GEO.belt, GEO.collar, GEO.sole]);
-  function updateCharacterLod() {
-    for (const p of characters) {
-      const u = p.userData, far = camera.position.distanceTo(p.position) > DETAIL_DIST;
-      if (far !== u.far) { u.far = far; for (const m of u.details) m.visible = !far; }
-    }
+    root.userData = u; scene.add(root); stand(root); return root;
   }
   function stand(p) {
     const u = p.userData;
@@ -2546,7 +2520,7 @@
     crowdCheer = Math.max(0, crowdCheer - dt * 0.3); // the crowd settles down a few seconds after a cheer
     crowdUniforms.uTime.value = NOW; crowdUniforms.uCheer.value = Math.min(1, crowdCheer * 1.4);
     cloudGroup.rotation.y += dt * 0.004; // clouds drift across the sky
-    waveFlags(NOW); updateCrowdLod(); updateCharacterLod(); adaptQuality();
+    waveFlags(NOW); updateCrowdLod();
     updatePrecip(dt);
     if (boardMsg && NOW < boardMsg.until + 0.3 && NOW - boardDrawnAt > 0.2) drawBoard(); // flashing, then back to the score
     renderer.render(scene, camera);
