@@ -395,31 +395,21 @@
   const boards = new THREE.Mesh(new THREE.CylinderGeometry(BOUNDARY + 3, BOUNDARY + 3, 1.1, 120, 1, true),
     new THREE.MeshBasicMaterial({ map: adTex, side: THREE.DoubleSide }));
   boards.position.set(CENTER.x, 0.55, CENTER.z); scene.add(boards);
-  const crowdTex = canvasTex(1024, 256, (g, w, h) => { // rows of seats with fans (shirt + head)
-    g.fillStyle = "#273449"; g.fillRect(0, 0, w, h);
-    const shirts = ["#ef4444", "#3b82f6", "#facc15", "#f8fafc", "#10b981", "#f97316", "#a855f7", "#0ea5e9", "#ec4899", "#004ba0", "#f9cd05"];
-    const skins = ["#f1c27d", "#e0ac69", "#c68e5e", "#8d5524"];
-    for (let y = 4, row = 0; y < h; y += 12, row++) {
-      g.fillStyle = row % 2 ? "#1f2a3b" : "#33425a"; g.fillRect(0, y + 7, w, 5);
-      for (let x = (row % 2) * 5; x < w; x += 10) {
-        if (Math.random() < 0.1) continue;
-        g.fillStyle = pick(shirts); g.fillRect(x + 1, y + 4, 8, 7);
-        g.fillStyle = pick(skins); g.beginPath(); g.arc(x + 5, y + 2.5, 3, 0, Math.PI * 2); g.fill();
-      }
-    }
-    g.fillStyle = "rgba(0,0,0,.35)"; for (let y = 0; y < h; y += 48) g.fillRect(0, y, w, 3);
-  });
-  crowdTex.wrapS = THREE.RepeatWrapping; crowdTex.repeat.set(6, 1);
-  // Seating: concrete stepped tiers (lower bowl) with individual spectators, and an upper stand behind them.
+  // ---------------- stands and spectators
+  // Two stepped tiers of seating (a lower bowl and an upper tier). Every seat holds a spectator: a low-poly seated
+  // person (chair, legs, shoes, shirt, arms, neck, head, hair) drawn with instancing. A small shader gives each fan
+  // their own shirt, skin and hair colour, makes them sway, and on big moments makes them jump with arms in the air.
   const TIER = { r0: 72, depth: 1.15, rise: 0.55, rows: 14, y0: 0.9 };
   TIER.rEnd = TIER.r0 + TIER.rows * TIER.depth; TIER.yEnd = TIER.y0 + (TIER.rows - 1) * TIER.rise;
-  const UPPER = { r0: 90, y0: 9.4, r1: 128, y1: 34 };
+  const UPPER = { r0: 90, depth: 1.6, rise: 1.05, rows: 22, y0: 9.6 };
+  UPPER.r1 = UPPER.r0 + UPPER.rows * UPPER.depth; UPPER.yTop = UPPER.y0 + (UPPER.rows - 1) * UPPER.rise; UPPER.y1 = UPPER.yTop + 3;
   // Height of the seating at a distance r from the centre of the ground (0 = grass, -1 = beyond the stadium).
   function standHeight(r) {
     if (r < TIER.r0) return 0;
     if (r < TIER.rEnd) return TIER.y0 + Math.floor((r - TIER.r0) / TIER.depth) * TIER.rise;
     if (r < UPPER.r0) return TIER.yEnd;
-    if (r < UPPER.r1) return UPPER.y0 + (r - UPPER.r0) / (UPPER.r1 - UPPER.r0) * (UPPER.y1 - UPPER.y0);
+    if (r < UPPER.r1) return UPPER.y0 + Math.floor((r - UPPER.r0) / UPPER.depth) * UPPER.rise;
+    if (r < UPPER.r1 + 4) return UPPER.y1; // back wall
     return -1;
   }
   const steps = [new THREE.Vector2(TIER.r0, 0)];
@@ -427,57 +417,128 @@
     const y = TIER.y0 + i * TIER.rise, r = TIER.r0 + i * TIER.depth;
     steps.push(new THREE.Vector2(r, y), new THREE.Vector2(r + TIER.depth, y));
   }
-  steps.push(new THREE.Vector2(UPPER.r0, TIER.yEnd), new THREE.Vector2(UPPER.r0, 0));
-  const tiers = new THREE.Mesh(new THREE.LatheGeometry(steps, 120), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.DoubleSide }));
+  steps.push(new THREE.Vector2(UPPER.r0, TIER.yEnd));
+  for (let i = 0; i < UPPER.rows; i++) {
+    const y = UPPER.y0 + i * UPPER.rise, r = UPPER.r0 + i * UPPER.depth;
+    steps.push(new THREE.Vector2(r, y), new THREE.Vector2(r + UPPER.depth, y));
+  }
+  steps.push(new THREE.Vector2(UPPER.r1, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, UPPER.y1), new THREE.Vector2(UPPER.r1 + 0.6, 0));
+  const tiers = new THREE.Mesh(new THREE.LatheGeometry(steps, 160), new THREE.MeshLambertMaterial({ color: 0x8b95a5, side: THREE.DoubleSide }));
   tiers.position.copy(CENTER); tiers.receiveShadow = true; scene.add(tiers);
-  const stands = new THREE.Mesh(new THREE.CylinderGeometry(UPPER.r1, UPPER.r0, UPPER.y1 - UPPER.y0, 96, 1, true),
-    new THREE.MeshLambertMaterial({ map: crowdTex, side: THREE.BackSide }));
-  stands.position.set(CENTER.x, (UPPER.y0 + UPPER.y1) / 2, CENTER.z); scene.add(stands);
-  const roof = new THREE.Mesh(new THREE.RingGeometry(UPPER.r1 - 18, UPPER.r1 + 4, 96), new THREE.MeshLambertMaterial({ color: 0xe5e7eb, side: THREE.DoubleSide }));
-  roof.rotation.x = -Math.PI / 2; roof.position.set(CENTER.x, UPPER.y1 + 1, CENTER.z); scene.add(roof);
+  const roof = new THREE.Mesh(new THREE.RingGeometry(UPPER.r1 - 20, UPPER.r1 + 2, 120), new THREE.MeshLambertMaterial({ color: 0xe5e7eb, side: THREE.DoubleSide }));
+  roof.rotation.x = -Math.PI / 2; roof.position.set(CENTER.x, UPPER.y1 + 3.5, CENTER.z); scene.add(roof);
 
-  // Spectators: thousands of instanced fans (body + head) facing the pitch. A small shader makes them sway,
-  // and jump up and down when the crowd cheers (boundaries and wickets).
   const crowdUniforms = { uTime: { value: 0 }, uCheer: { value: 0 } };
   let crowdCheer = 0;
-  function crowdMaterial() {
+  // Fan body parts (aPart): 0 skin, 1 shirt, 2 hair/cap, 3 trousers, 4 shoes, 5 seat, 6/7 left/right sleeve, 8/9 left/right forearm
+  const fanMaterial = (() => {
     const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
     m.onBeforeCompile = (s) => {
       s.uniforms.uTime = crowdUniforms.uTime; s.uniforms.uCheer = crowdUniforms.uCheer;
-      s.vertexShader = "attribute float aPhase;\nuniform float uTime;\nuniform float uCheer;\n" + s.vertexShader.replace("#include <begin_vertex>",
-        "#include <begin_vertex>\n  float joins = step(0.22, fract(aPhase * 7.0));\n" +
-        "  transformed.y += max(0.0, sin(uTime * 9.0 + aPhase * 6.283)) * 0.4 * uCheer * joins + sin(uTime * 1.3 + aPhase * 40.0) * 0.015;");
+      s.vertexShader = [
+        "attribute float aPart; attribute vec3 iShirt; attribute vec3 iSkin; attribute vec3 iHair; attribute vec3 iSeat;",
+        "attribute float iPhase; attribute float iEmpty; uniform float uTime; uniform float uCheer; varying vec3 vFanCol;",
+      ].join("\n") + "\n" + s.vertexShader.replace("#include <begin_vertex>", [
+        "#include <begin_vertex>",
+        "  float cheer = uCheer * step(0.2, fract(iPhase * 7.0));", // most fans join in
+        "  if (aPart > 5.5) {", // arms swing up around the shoulder
+        "    float side = (aPart < 6.5 || (aPart > 7.5 && aPart < 8.5)) ? -1.0 : 1.0;",
+        "    vec3 piv = vec3(side * 0.215, 1.05, 0.05);",
+        "    float ang = cheer * (2.5 + 0.3 * sin(uTime * 11.0 + iPhase * 30.0));",
+        "    float c = cos(ang), sn = sin(ang); vec3 q = transformed - piv;",
+        "    transformed = piv + vec3(q.x, q.y * c - q.z * sn, q.y * sn + q.z * c);",
+        "  }",
+        "  if (aPart < 4.5 || aPart > 5.5) {", // everyone but the chair bobs, and jumps when cheering
+        "    transformed.y += max(0.0, sin(uTime * 9.0 + iPhase * 6.283)) * 0.3 * cheer + sin(uTime * 1.3 + iPhase * 40.0) * 0.012;",
+        "    if (iEmpty > 0.5) transformed = vec3(0.0, -60.0, 0.0);", // empty seat
+        "  }",
+        "  vFanCol = (aPart < 0.5 || aPart > 7.5) ? iSkin : (aPart < 1.5 || aPart > 5.5) ? iShirt : aPart < 2.5 ? iHair",
+        "    : aPart < 3.5 ? (fract(iPhase * 13.0) < 0.55 ? vec3(0.16, 0.22, 0.4) : vec3(0.1, 0.1, 0.12)) : aPart < 4.5 ? vec3(0.9) : iSeat;",
+      ].join("\n"));
+      s.fragmentShader = "varying vec3 vFanCol;\n" + s.fragmentShader.replace("#include <color_fragment>", "#include <color_fragment>\n  diffuseColor.rgb *= vFanCol;");
     };
     return m;
+  })();
+  // A seated spectator, facing -z, sitting on the step at y = 0. `hi` = more detail for the closer, lower tier.
+  function buildFan(hi) {
+    const parts = [];
+    const add = (geo, part, pos, rot, scl) => {
+      const mtx = new THREE.Matrix4().compose(V(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]))), V(...(scl || [1, 1, 1])));
+      parts.push([(geo.index ? geo.toNonIndexed() : geo).applyMatrix4(mtx), part]);
+    };
+    const r = hi ? 6 : 4;
+    add(new THREE.BoxGeometry(0.5, 0.06, 0.44), 5, [0, 0.42, 0.02]); // seat
+    add(new THREE.BoxGeometry(0.5, 0.5, 0.06), 5, [0, 0.7, 0.25], [-0.12, 0, 0]); // seat back
+    for (const s of [-1, 1]) {
+      add(new THREE.CapsuleGeometry(0.075, 0.3, 1, r), 3, [s * 0.1, 0.5, -0.14], [Math.PI / 2, 0, 0]); // thigh
+      add(new THREE.BoxGeometry(0.12, 0.42, 0.13), 3, [s * 0.1, 0.26, -0.33]); // shin
+      if (hi) add(new THREE.BoxGeometry(0.11, 0.08, 0.22), 4, [s * 0.1, 0.04, -0.38]); // shoe
+    }
+    add(new THREE.CapsuleGeometry(0.17, 0.26, hi ? 2 : 1, hi ? 7 : 5), 1, [0, 0.86, 0.05], [0.08, 0, 0], [1.12, 1, 0.68]); // torso
+    if (hi) add(new THREE.CylinderGeometry(0.05, 0.055, 0.12, 6), 0, [0, 1.12, 0.05]); // neck
+    add(new THREE.SphereGeometry(0.115, hi ? 9 : 6, hi ? 6 : 4), 0, [0, 1.27, 0.04], null, [0.92, 1.08, 1]); // head
+    add(new THREE.SphereGeometry(0.122, hi ? 9 : 6, hi ? 4 : 2, 0, Math.PI * 2, 0, Math.PI * 0.55), 2, [0, 1.29, 0.055], [-0.25, 0, 0], [0.95, 1.05, 1.05]); // hair
+    if (hi) add(new THREE.BoxGeometry(0.03, 0.045, 0.04), 0, [0, 1.25, -0.075]); // nose
+    for (const s of [-1, 1]) {
+      add(new THREE.CapsuleGeometry(0.05, 0.2, 1, r), s < 0 ? 6 : 7, [s * 0.215, 0.92, 0.05], [0, 0, s * 0.08]); // upper arm
+      add(new THREE.CapsuleGeometry(0.043, 0.2, 1, r), s < 0 ? 8 : 9, [s * 0.2, 0.78, -0.07], [Math.PI / 2 - 0.3, 0, 0]); // forearm on the lap
+    }
+    let n = 0; parts.forEach(([g]) => { n += g.attributes.position.count; });
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), part = new Float32Array(n);
+    let o = 0;
+    parts.forEach(([g, p]) => {
+      const c = g.attributes.position.count;
+      pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); part.fill(p, o, o + c); o += c;
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+    geo.setAttribute("aPart", new THREE.BufferAttribute(part, 1));
+    return geo;
   }
-  (() => {
-    const seats = [];
-    for (let row = 0; row < TIER.rows; row++) {
-      const r = TIER.r0 + (row + 0.55) * TIER.depth, y = TIER.y0 + row * TIER.rise, n = Math.floor(2 * Math.PI * r / 0.82);
+  // Fill a tier with fans, split into sectors so the parts of the crowd behind the camera aren't drawn.
+  function fillTier(tier, spacing, rowOffset, hi) {
+    const base = buildFan(hi), SECTORS = 16, sectors = Array.from({ length: SECTORS }, () => []);
+    const shirts = [0xef4444, 0x3b82f6, 0xfacc15, 0xf8fafc, 0x10b981, 0xf97316, 0xa855f7, 0x0ea5e9, 0xec4899, 0x1f2937, 0xf1f5f9,
+      ...TEAM_KEYS.map((k) => IPL[k].c1), ...TEAM_KEYS.map((k) => IPL[k].c1)];
+    const skins = [0xf1c27d, 0xe0ac69, 0xd8a47f, 0xc68e5e, 0xa86b3c, 0x8d5524, 0x6b4226];
+    const hair = [0x161616, 0x161616, 0x2b1d14, 0x3b2618, 0x5a3a22, 0x8a8a8a, 0xb08850, ...TEAM_KEYS.map((k) => IPL[k].c1)]; // some wear team caps
+    const seatCols = [0x1e3a8a, 0x9f1239, 0x166534, 0x92400e, 0x5b21b6, 0x0f766e, 0x9a3412, 0x1e40af];
+    for (let row = 0; row < tier.rows; row++) {
+      const rr = tier.r0 + (row + rowOffset) * tier.depth, y = tier.y0 + row * tier.rise, n = Math.floor((2 * Math.PI * rr) / spacing);
       for (let i = 0; i < n; i++) {
-        const a = ((i + (row % 2) * 0.5) / n) * Math.PI * 2, x = Math.sin(a) * r;
-        if (Math.abs(x) < 10 && Math.abs(Math.cos(a)) > 0.9) continue; // behind the sightscreens
-        if (Math.random() < 0.1) continue; // a few empty seats
-        seats.push([CENTER.x + x, y, CENTER.z + Math.cos(a) * r, a]);
+        const a = ((i + (row % 2) * 0.5) / n) * Math.PI * 2, x = Math.sin(a) * rr;
+        if (Math.abs(x) < 10 && Math.abs(Math.cos(a)) > 0.9 && tier === TIER) continue; // behind the sightscreens
+        const k = Math.floor((((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI) * SECTORS) % SECTORS;
+        sectors[k].push({ x: CENTER.x + x, y, z: CENTER.z + Math.cos(a) * rr, a, seat: seatCols[k % seatCols.length] });
       }
     }
-    const body = new THREE.CapsuleGeometry(0.2, 0.28, 3, 8); body.translate(0, 0.42, 0);
-    const head = new THREE.SphereGeometry(0.14, 10, 8); head.translate(0, 0.88, 0);
-    const phase = new Float32Array(seats.length).map(() => Math.random());
-    const shirts = [0xef4444, 0x3b82f6, 0xfacc15, 0xf8fafc, 0x10b981, 0xf97316, 0xa855f7, 0x0ea5e9, 0xec4899, 0x111827, ...TEAM_KEYS.map((k) => IPL[k].c1)];
-    const skins = [0xf1c27d, 0xe0ac69, 0xc68e5e, 0xa86b3c, 0x8d5524];
-    const bodies = new THREE.InstancedMesh(body, crowdMaterial(), seats.length), heads = new THREE.InstancedMesh(head, crowdMaterial(), seats.length);
-    const dummy = new THREE.Object3D(), col = new THREE.Color();
-    seats.forEach(([x, y, z, a], i) => {
-      dummy.position.set(x, y, z); dummy.rotation.set(0, a + Math.PI, 0); dummy.scale.setScalar(rand(0.9, 1.1)); dummy.updateMatrix();
-      bodies.setMatrixAt(i, dummy.matrix); heads.setMatrixAt(i, dummy.matrix);
-      bodies.setColorAt(i, col.setHex(pick(shirts))); heads.setColorAt(i, col.setHex(pick(skins)));
+    const col = new THREE.Color(), dummy = new THREE.Object3D();
+    sectors.forEach((list) => {
+      if (!list.length) return;
+      const c = list.reduce((s, p) => s.add(V(p.x, p.y, p.z)), V()).divideScalar(list.length);
+      const geo = base.clone(), N = list.length;
+      const attr = (size) => new Float32Array(N * size);
+      const shirt = attr(3), skin = attr(3), hr = attr(3), seat = attr(3), phase = attr(1), empty = attr(1);
+      const mesh = new THREE.InstancedMesh(geo, fanMaterial, N);
+      let radius = 0;
+      list.forEach((p, i) => {
+        dummy.position.set(p.x - c.x, p.y - c.y, p.z - c.z); dummy.rotation.set(0, p.a, 0); dummy.scale.setScalar(rand(0.92, 1.08)); dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        radius = Math.max(radius, dummy.position.length());
+        col.setHex(pick(shirts)).toArray(shirt, i * 3); col.setHex(pick(skins)).toArray(skin, i * 3);
+        col.setHex(pick(hair)).toArray(hr, i * 3); col.setHex(p.seat).toArray(seat, i * 3);
+        phase[i] = Math.random(); empty[i] = Math.random() < 0.08 ? 1 : 0;
+      });
+      for (const [name, arr, size] of [["iShirt", shirt, 3], ["iSkin", skin, 3], ["iHair", hr, 3], ["iSeat", seat, 3], ["iPhase", phase, 1], ["iEmpty", empty, 1]]) {
+        geo.setAttribute(name, new THREE.InstancedBufferAttribute(arr, size));
+      }
+      geo.boundingSphere = new THREE.Sphere(V(), radius + 2); // so whole sectors outside the view are skipped
+      mesh.position.copy(c); scene.add(mesh);
     });
-    for (const m of [bodies, heads]) {
-      m.geometry.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phase, 1));
-      m.frustumCulled = false; scene.add(m);
-    }
-  })();
+  }
+  fillTier(TIER, 0.8, 0.45, true);
+  fillTier(UPPER, 1.05, 0.4, false);
 
   for (let i = 0; i < 4; i++) {
     const a = Math.PI / 4 + i * Math.PI / 2, x = CENTER.x + Math.sin(a) * 136, z = CENTER.z + Math.cos(a) * 136;
@@ -1010,7 +1071,7 @@
 
   function resetField() {
     S.del = null; S.swung = false; S.shot = null; S.lift = 0; S.pendingHit = null; S.crossed = false; S.bounced = false; S.frozen = false;
-    S.cpuSwing = null; S.hit = null; S.result = null; S.stumpFx = null; S.chaser = null; S.runners = null; S.celebrate = null; S.netResult = null;
+    S.cpuSwing = null; S.hit = null; S.result = null; S.stumpFx = null; S.catchFx = null; S.chaser = null; S.runners = null; S.celebrate = null; S.netResult = null;
     ball.visible = false; pitchMarker.visible = false; aimMarker.visible = false;
     batsman.position.set(0.5, 0, BAT_Z); batsman.rotation.y = Math.PI / 2;
     nonStriker.position.set(-0.9, 0, -19.4); nonStriker.rotation.y = Math.PI; stand(nonStriker);
@@ -1266,7 +1327,7 @@
     for (let i = Math.max(1, from); i < Math.min(to, pts.length); i++) {
       const [x, y, z] = pts[i], t = i * SIM_DT;
       if (radial(x, z) > BOUNDARY - 0.3) return null; // over the rope: out of reach
-      if (mode === "catch" ? y < 0.25 || y > 2.7 : y > 1.4) continue;
+      if (mode === "catch" ? y < 0.35 || y > 1.6 : y > 1.4) continue; // catches are taken between the knees and just above the head
       for (let idx = -1; idx < fielders.length; idx++) {
         if (exclude && exclude.has(idx)) continue;
         const h = idx === -1 ? keeper.userData.home : fielders[idx].userData.home;
@@ -1303,7 +1364,8 @@
         }
       }
     }
-    const six = !o.out && !o.dropped && (ev.out >= 0 || ev.stand >= 0 || (ev.rope >= 0 && (ev.land < 0 || ev.land > ev.rope)));
+    // six = it crossed the rope on the full; if it bounced inside the rope first (even into the stands) it's four
+    const six = !o.out && !o.dropped && ev.rope >= 0 && (ev.land < 0 || ev.land > ev.rope);
     // along the ground: the first fielder who can reach it stops it 90% of the time (a misfield lets it run on)
     if (!o.out && !o.dropped && !six) {
       let from = o.aerial ? Math.max(1, ev.land) : 1;
@@ -1344,7 +1406,15 @@
     let f, target, speed = 7;
     if (h.who !== null && h.who !== undefined) { // the fielder who catches / stops / drops it runs to that spot in time
       f = h.who === -1 ? keeper : fielders[h.who];
-      target = at(Math.min(n - 1, Math.round(h.eventT / h.pdt))).setY(0);
+      const ci = Math.min(n - 1, Math.round(h.eventT / h.pdt)), cp = at(ci);
+      const inc = cp.clone().sub(at(Math.max(0, ci - 1))).setY(0);
+      if (inc.lengthSq() < 1e-8) inc.set(0, 0, 1);
+      inc.normalize();
+      if (o.out || o.dropped) {
+        // stand just behind where the ball comes down, facing it, so it drops into the hands rather than onto the head
+        target = cp.clone().addScaledVector(inc, 0.42).setY(0);
+        S.catchFx = { f, p: cp, face: cp.clone().addScaledVector(inc, -4), lat: V(-inc.z, 0, inc.x).multiplyScalar(0.07), t: NOW + h.eventT, drop: o.dropped };
+      } else target = cp.clone().setY(0);
       speed = clamp(f.position.distanceTo(target) / Math.max(0.25, h.eventT - REACT), 1.5, 9.5);
     } else { // nobody reached it: the nearest fielder chases it down
       f = fielders[nearestFielderIdx(endP)]; target = endP.clone().setY(0);
@@ -1529,12 +1599,19 @@
       const c = S.chaser, f = c.f, to = c.target.clone().sub(f.position).setY(0), dist = to.length();
       if (c.start && NOW < c.start) face(f, c.target.x, c.target.z); // reacting to the shot
       else if (dist > 0.3) { f.position.addScaledVector(to.normalize(), Math.min(dist, c.speed * dt)); face(f, c.target.x, c.target.z); animRun(f, NOW * 13, 1); }
-      else if (f !== keeper) {
-        stand(f);
-        if (S.hit && S.hit.o.out) { f.userData.shL.rotation.set(-2.6, 0, -0.2); f.userData.shR.rotation.set(-2.6, 0, 0.2); } // took the catch
-      }
+      else if (f !== keeper) stand(f);
     }
     if (!(S.chaser && S.chaser.f === keeper)) keeperPose(keeper, S.phase === "hit" ? 0.3 : 1);
+    // taking a catch: face the ball and get both hands to where it's dropping (held after a clean catch)
+    if (S.catchFx && NOW > S.catchFx.t - 0.45 && !(S.catchFx.drop && NOW > S.catchFx.t + 0.3)) {
+      const cf = S.catchFx, f = cf.f, U = f.userData;
+      if (!S.chaser || f.position.distanceTo(S.chaser.target) <= 0.35) stand(f);
+      face(f, cf.face.x, cf.face.z);
+      f.updateMatrixWorld(true);
+      const a = cf.p.clone().add(cf.lat), b = cf.p.clone().sub(cf.lat), sL = U.shL.getWorldPosition(V());
+      const [tl, tr] = sL.distanceTo(a) < sL.distanceTo(b) ? [a, b] : [b, a];
+      solveArm(U, "L", tl, V(-1, -1, 0.3)); solveArm(U, "R", tr, V(1, -1, 0.3));
+    }
     // broken stumps
     if (S.stumpFx) {
       const t = NOW - S.stumpFx.t0;
