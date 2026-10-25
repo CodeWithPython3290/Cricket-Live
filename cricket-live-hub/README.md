@@ -26,6 +26,16 @@ A cartoon cricket game. It runs without an internet connection: its 3D engine (t
 |---|---|---|
 | Keys | `Space` / click to swing · hold `←` `→` to aim · hold `↑` to loft · hold `↓` to defend | `A` `D` line · `W` `S` length · `Q` fast/spin · `F` bowl |
 
+### IPL season mode
+
+**🏆 Play an IPL season** runs a full season with your account (sign in first). It's only available to signed-in players, because the season is saved to your account.
+
+- **Format:** it follows the real IPL format. The ten teams are split into two groups of five, and each team plays 14 league matches (70 in all). The top four go to Qualifier 1, the Eliminator, Qualifier 2 and the Final, for 74 matches in all.
+- **The table:** a win is worth 2 points. A tied match goes to a Super Over. Teams level on points are separated by net run rate.
+- **Your matches:** you play every match your team is in, or can let the computer simulate one.
+- **Everyone else's matches:** these are simulated, using each team's approximate all-time IPL win rate plus a home advantage.
+- **Saving:** the season is saved after every match. If you leave mid-match, that match doesn't count, and you carry on from your last finished one.
+
 ### Online play
 
 Online multiplayer is built into the app. Everything is stored in **`cricket_multiplayer.db`**, a SQLite file the app creates next to `streamlit_app.py`:
@@ -35,6 +45,7 @@ Online multiplayer is built into the app. Everything is stored in **`cricket_mul
 | `users`, `sessions` | Player accounts (username, plus a salted and hashed password) and sign-in tokens |
 | `rooms`, `room_players` | Match rooms with 5-letter codes, and who's in each one |
 | `events` | The messages the two games send each other: every delivery and result |
+| `seasons` | Each player's IPL season in progress (fixtures, results and playoffs) |
 
 How it fits together:
 

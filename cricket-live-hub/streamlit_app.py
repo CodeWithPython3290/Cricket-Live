@@ -598,6 +598,23 @@ def load_template(file_name):
     return (TEMPLATE_DIR / file_name).read_text(encoding="utf-8")
 
 
+# Links to files in a GitHub repository. raw.githubusercontent.com (and github.com/.../raw|blob/...) is meant for
+# viewing files, not hosting pages: GitHub rate-limits it (HTTP 429 "Too Many Requests") and serves everything as
+# plain text, so browsers won't run its scripts. jsDelivr's GitHub CDN serves the same files for use in web pages.
+GITHUB_FILE = re.compile(
+    r"https?://(?:raw\.githubusercontent\.com/([\w.-]+)/([\w.-]+)/(?:refs/(?:heads|tags)/)?"
+    r"|github\.com/([\w.-]+)/([\w.-]+)/(?:raw|blob)/(?:refs/(?:heads|tags)/)?)([\w.-]+)/([^\s\"'<>)?#]+)"
+)
+
+
+def github_links_to_cdn(page):
+    """Point links to GitHub repository files at jsDelivr (cdn.jsdelivr.net/gh/user/repo@ref/path)."""
+    def cdn(m):
+        user, repo = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+        return f"https://cdn.jsdelivr.net/gh/{user}/{repo}@{m.group(5)}/{m.group(6)}"
+    return GITHUB_FILE.subn(cdn, page)
+
+
 ENGINE_TAG = '<script src="three.min.js"></script>'
 
 
@@ -686,7 +703,7 @@ def html_viewer_tab():
                 if up is not None:
                     name, content = up.name, up.getvalue().decode("utf-8", errors="replace")
 
-        height = 780
+        height, runnable = 780, ""
         if content.strip():
             with st.container(border=True):
                 title = re.search(r"<title[^>]*>(.*?)</title>", content, re.I | re.S)
@@ -701,6 +718,14 @@ def html_viewer_tab():
                     unsafe_allow_html=True,
                 )
                 runnable = bundle_engine(content)  # templates carry their 3D engine inline, so they run offline
+                cdn_page, n_links = github_links_to_cdn(runnable)
+                if n_links and st.checkbox(
+                    f"Load its {n_links} GitHub file link{'s' if n_links > 1 else ''} through jsDelivr", value=True,
+                    help="Files linked straight from GitHub (raw.githubusercontent.com) are rate-limited by GitHub "
+                         "(error 429) and served as plain text, so they often don't load. jsDelivr's GitHub CDN "
+                         "serves the same files for web pages. New commits can take up to 12 hours to show there.",
+                ):
+                    runnable = cdn_page
                 open_blank_button(runnable)
                 st.download_button("Download file", runnable, file_name=name, mime="text/html", width="stretch")
                 # a 3D game is shown at 16:9, which fits the preview column at about 560 px
@@ -713,9 +738,9 @@ def html_viewer_tab():
             if view == "Source":
                 st.code(content, language="html", line_numbers=True, height=height)
             elif ENGINE_TAG in content:  # 3D games
-                game_preview(bundle_engine(content), height)
+                game_preview(runnable, height)
             else:
-                components.html(bundle_engine(content), height=height, scrolling=True)
+                components.html(runnable, height=height, scrolling=True)
         else:
             st.markdown(
                 f'<div class="empty" style="height:{height}px;display:flex;align-items:center;'

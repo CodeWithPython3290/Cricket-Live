@@ -6,6 +6,7 @@ Everything multiplayer lives in cricket_multiplayer.db:
 * users / sessions - accounts (username + salted PBKDF2 password hash) and sign-in tokens
 * rooms / room_players - match rooms with 5-letter codes, and who is in each one
 * events - the messages the two players' games send each other (every delivery and result)
+* seasons - each signed-in player's IPL season in progress (fixtures, results, playoffs), saved after every match
 
 The game sends requests through a small bridge component on the Cricket Live Hub page
 (templates/index.html), and streamlit_app.py passes each one to handle(). It all runs inside
@@ -71,6 +72,11 @@ create table if not exists events (
     created real not null
 );
 create index if not exists events_by_room on events (code, id);
+create table if not exists seasons (
+    user_id integer primary key references users(id) on delete cascade,
+    data    text not null,
+    updated real not null
+);
 """
 
 
@@ -311,10 +317,42 @@ def op_poll(conn, d, rid):
     return {"events": events}
 
 
+# --------------------------------------------------------------------------- #
+# IPL season mode (signed-in players only): one saved season per account
+# --------------------------------------------------------------------------- #
+MAX_SEASON = 200_000  # bytes; a full 74-match season is about 15 KB
+
+
+def op_season_load(conn, d, rid):
+    user = _auth(conn, d)
+    row = conn.execute("select data from seasons where user_id = ?", (user["id"],)).fetchone()
+    return {"season": json.loads(row["data"]) if row else None}
+
+
+def op_season_save(conn, d, rid):
+    user, season = _auth(conn, d), d.get("season")
+    if not isinstance(season, dict) or season.get("team") not in TEAMS or not isinstance(season.get("fixtures"), list):
+        raise ApiError(400, "That season data isn't valid.")
+    data = json.dumps(season)
+    if len(data) > MAX_SEASON:
+        raise ApiError(413, "Season data too large.")
+    conn.execute("insert into seasons (user_id, data, updated) values (?, ?, ?) "
+                 "on conflict(user_id) do update set data = excluded.data, updated = excluded.updated",
+                 (user["id"], data, time.time()))
+    return {"ok": True}
+
+
+def op_season_reset(conn, d, rid):
+    user = _auth(conn, d)
+    conn.execute("delete from seasons where user_id = ?", (user["id"],))
+    return {"ok": True}
+
+
 OPS = {
     "signup": op_signup, "login": op_login, "me": op_me, "logout": op_logout, "team": op_team, "result": op_result,
     "room_create": op_room_create, "room_join": op_room_join, "room_leave": op_room_leave,
     "room_team": op_room_team, "send": op_send, "poll": op_poll,
+    "season_load": op_season_load, "season_save": op_season_save, "season_reset": op_season_reset,
 }
 
 

@@ -88,6 +88,24 @@
   .vs-mid { font-weight: 900; color: var(--muted); }
   .msg-title { font-size: 26px; font-weight: 900; letter-spacing: -.02em; margin-bottom: 6px; }
   .msg-body { font-size: 15px; line-height: 1.6; color: #334155; }
+  /* ---------- IPL season ---------- */
+  .card.wide { width: min(720px, 100%); }
+  .ptable { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .ptable th { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; text-align: right;
+    padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .ptable td { padding: 7px 8px; text-align: right; border-bottom: 1px solid #f1f5f9; font-variant-numeric: tabular-nums; }
+  .ptable th:nth-child(-n+2), .ptable td:nth-child(-n+2) { text-align: left; }
+  .ptable th:first-child { width: 28px; } .ptable th:nth-child(2) { width: 46%; }
+  .ptable .tm { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; vertical-align: middle; }
+  .ptable tr.mine td { background: #ecfdf5; } .ptable .tm { white-space: nowrap; } .ptable tr.cut td { border-bottom: 2px dashed var(--accent); }
+  .ptable .pts { font-weight: 900; }
+  .next { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 16px; background: #f8fafc; border: 1px solid var(--line); margin-top: 16px; }
+  .next .grow { flex: 1; } .next .stage { font-size: 11.5px; font-weight: 800; color: var(--accent-d); text-transform: uppercase; letter-spacing: .08em; }
+  .next .primary { width: auto; margin: 0; padding: 12px 18px; font-size: 15px; } .next .ghost { width: auto; margin: 0; padding: 11px 14px; font-size: 13.5px; }
+  .res { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #f1f5f9; font-size: 13.5px; }
+  .res .grow { flex: 1; color: #334155; } .res small { color: var(--muted); }
+  .champ { text-align: center; padding: 18px; border-radius: 16px; background: linear-gradient(135deg, #fef3c7, #fde68a); margin-top: 16px; }
+  .champ b { font-size: 22px; }
   .scorecard { margin-top: 14px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
   .scorecard .r { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   .scorecard .r:last-child { border: 0; }
@@ -202,6 +220,7 @@
     <div class="muted">Pick your IPL side and play.</div>
     <div class="stack">
       <button class="big" data-go="cpu"><span class="ic">🤖</span><span>Play vs CPU<small>Quick match against the computer</small></span></button>
+      <button class="big" data-go="season"><span class="ic">🏆</span><span>Play an IPL season<small>Sign in, pick your team and go for the title · saved as you play</small></span></button>
       <button class="big" data-go="online"><span class="ic">🌐</span><span>Play online<small>Sign in and play a friend on another computer</small></span></button>
     </div>
     <div id="homeUser" class="muted small center"></div>
@@ -219,8 +238,35 @@
     <button class="primary" id="setupStart">Start match</button>
   </div>
 
+  <div class="card hidden" id="scrSeasonNew">
+    <div class="head"><button class="back" data-back="scrHome">←</button><h2>New IPL season</h2></div>
+    <p class="muted small">The full IPL: 14 league matches each, then the playoffs. You play every <b>your team</b> match;
+      the rest of the league is simulated. Your season is saved to your account after every match.</p>
+    <div class="label">Your team</div>
+    <div class="teams" id="pickSeason"></div>
+    <div class="grid2">
+      <div><div class="label">Overs per match</div><div class="chips" id="oversChipsSeason"></div></div>
+      <div><div class="label">Wickets</div><div class="chips" id="wktChipsSeason"></div></div>
+    </div>
+    <div class="label">Difficulty</div><div class="chips" id="diffChipsSeason"></div>
+    <button class="primary" id="seasonCreate">Start the season</button>
+    <div class="formmsg" id="snNewMsg"></div>
+  </div>
+
+  <div class="card wide hidden" id="scrSeason">
+    <div class="head"><button class="back" data-back="scrHome">←</button><h2 id="snTitle">IPL season</h2></div>
+    <div id="snNext"></div>
+    <div class="label">Points table</div>
+    <div id="snTable"></div>
+    <div class="label">Latest results</div>
+    <div id="snResults"></div>
+    <div class="formmsg" id="snMsg"></div>
+    <div class="center"><button class="link" id="seasonAbandon">Abandon this season and start a new one</button></div>
+  </div>
+
   <div class="card hidden" id="scrAuth">
-    <div class="head"><button class="back" data-back="scrHome">←</button><h2>Play online</h2></div>
+    <div class="head"><button class="back" data-back="scrHome">←</button><h2 id="auTitle">Play online</h2></div>
+    <div class="muted small" id="auWhy"></div>
     <div class="tabs" id="authTabs"><button data-tab="in" class="on">Sign in</button><button data-tab="up">Create account</button></div>
     <input class="field" id="auUser" placeholder="Username" maxlength="16" autocomplete="username">
     <input class="field" id="auPass" type="password" placeholder="Password" autocomplete="current-password">
@@ -1266,7 +1312,7 @@
   const oversStr = (b) => `${Math.floor(b / 6)}.${b % 6}`;
 
   // ================================================================ UI helpers
-  const SCREENS = ["scrHome", "scrSetup", "scrAuth", "scrLobby", "scrRoom"];
+  const SCREENS = ["scrHome", "scrSetup", "scrSeasonNew", "scrSeason", "scrAuth", "scrLobby", "scrRoom"];
   function screen(id) { $("screens").classList.toggle("hidden", !id); SCREENS.forEach((s) => $(s).classList.toggle("hidden", s !== id)); }
   function restartAnim(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
   function showFlash(text, color, sub) {
@@ -1414,13 +1460,17 @@
     S.token++; S.target = null; S.cur = 0; S.inn = null; S.innings = []; S.pendingBowl = null; S.netResult = null; S.milestone = null; boardMsg = null;
     S.phase = "paused"; screen(null); hideMsg(); $("hud").classList.add("hidden");
   }
-  function startOffline() {
-    const s = S.setup, cpuTeam = pick(TEAM_KEYS.filter((k) => k !== s.team)); // a random opponent
-    S.mode = "cpu"; S.cfg = { overs: s.overs, wkts: s.wkts, diff: s.diff };
-    S.teams = [{ key: s.team, name: IPL[s.team].name, kind: "human" }, { key: cpuTeam, name: IPL[cpuTeam].name, kind: "cpu" }];
+  function startOffline() { // quick match: a random opponent at one of the two teams' home grounds
+    const s = S.setup, cpuTeam = pick(TEAM_KEYS.filter((k) => k !== s.team));
+    S.seasonMatch = null;
+    startCpuMatch(s.team, cpuTeam, pick([s.team, cpuTeam]), { overs: s.overs, wkts: s.wkts, diff: s.diff });
+  }
+  function startCpuMatch(team, cpuTeam, venue, cfg, label) {
+    S.mode = "cpu"; S.cfg = cfg;
+    S.teams = [{ key: team, name: IPL[team].name, kind: "human" }, { key: cpuTeam, name: IPL[cpuTeam].name, kind: "cpu" }];
     resetMatchState();
-    applyConditions(pickConditions(pick([s.team, cpuTeam]))); // at one of the two teams' home grounds
-    const where = `<p class="muted small">🏟️ ${esc(conditionsText(S.conditions))}</p>`;
+    applyConditions(pickConditions(venue));
+    const where = (label ? `<p class="muted small"><b>${esc(label)}</b></p>` : "") + `<p class="muted small">🏟️ ${esc(conditionsText(S.conditions))}</p>`;
     const w = Math.random() < 0.5 ? 0 : 1, tw = S.teams[w];
     const begin = (batFirst) => { S.innings = [newInnings(batFirst, 1 - batFirst), null]; startInnings(); };
     if (tw.kind === "human") {
@@ -1455,10 +1505,13 @@
   }
   function showResult() {
     const [a, b] = S.innings;
-    let title, winner = null;
-    if (b.runs >= S.target) { const w = S.cfg.wkts - b.wkts; winner = b.bat; title = `🏆 ${esc(S.teams[b.bat].name)} won by ${w} wicket${w === 1 ? "" : "s"}`; }
+    let title, winner = null, plain = "";
+    if (b.runs >= S.target) { const w = S.cfg.wkts - b.wkts; winner = b.bat; plain = `${S.teams[b.bat].name} won by ${w} wicket${w === 1 ? "" : "s"}`; }
     else if (b.runs === S.target - 1) title = "🤝 Match tied!";
-    else { const r = S.target - 1 - b.runs; winner = a.bat; title = `🏆 ${esc(S.teams[a.bat].name)} won by ${r} run${r === 1 ? "" : "s"}`; }
+    else { const r = S.target - 1 - b.runs; winner = a.bat; plain = `${S.teams[a.bat].name} won by ${r} run${r === 1 ? "" : "s"}`; }
+    if (winner === null && S.seasonMatch) { // a season match needs a winner: Super Over
+      winner = Math.random() < 0.5 ? 0 : 1; plain = `${S.teams[winner].name} won the Super Over`; title = `🤝 Tied! ${esc(plain)}`;
+    } else if (winner !== null) title = `🏆 ${esc(plain)}`;
     if (winner !== null) recordMatch(S.teams[winner].key, S.teams[1 - winner].key); // feeds the win-probability model
     const row = (inn) => {
       const top = inn.batters.slice().sort((x, y) => y.runs - x.runs)[0];
@@ -1476,6 +1529,9 @@
         host ? [{ label: "🔁 Rematch", fn: () => { if (S.net && S.net.peer) hostStart(); else showMsg("Opponent left", "", [{ label: "Back to lobby", fn: leaveRoom }]); } },
           { label: "Leave room", fn: leaveRoom }]
           : [{ label: "Leave room", fn: leaveRoom }]);
+    } else if (S.seasonMatch) {
+      recordSeasonResult(winner, plain);
+      showMsg(title, card + `<p class="muted small center">Saved to your season.</p>`, [{ label: "🏆 Back to the season", fn: backToSeason }]);
     } else {
       showMsg(title, card, [{ label: "🔁 Rematch", fn: startOffline }, { label: "Main menu", fn: toMenu }]);
     }
@@ -1789,7 +1845,7 @@
   }
   // A leaping catch on the boundary: the last point before the rope where the ball is above head height but still
   // within a jump (1.6 to 2.9 m), and a fielder can get there in time.
-  const SCREAMER_RATE = 0.7;
+  const SCREAMER_RATE = 0.6; // about 2 in every 100 sixes
   function boundaryCatch(pts, ropeI) {
     for (let i = ropeI - 1; i > Math.max(1, ropeI - 90); i--) {
       const [x, y, z] = pts[i], t = i * SIM_DT;
@@ -2363,7 +2419,7 @@
   // The game talks to the Cricket Live Hub tab that opened it; that tab passes each request to multiplayer.py.
   const API = { token: store.get("cl3d_token") };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const NO_BRIDGE = "Online play works when you start the game with the <b>▶ Play in new tab</b> button in the " +
+  const NO_BRIDGE = "Accounts (online play and IPL seasons) work when you start the game with the <b>▶ Play in new tab</b> button in the " +
     "Cricket Live Hub app. Keep the app's tab open while you play.";
   function bridge() {
     for (const w of [window.opener, window.parent]) {
@@ -2379,12 +2435,17 @@
     return r;
   }
 
-  async function goOnline() {
+  // Sign in (or create an account), then carry on to online play or to season mode.
+  const afterAuth = () => (S.afterAuth === "season" ? openSeason() : openLobby());
+  async function goOnline(after) {
+    S.afterAuth = after === "season" ? "season" : "online";
+    $("auTitle").textContent = S.afterAuth === "season" ? "Sign in to play a season" : "Play online";
+    $("auWhy").innerHTML = S.afterAuth === "season" ? "IPL seasons are saved to your account, so you need to sign in (or create a free account) to play one." : "";
     screen("scrAuth");
     formMsg("auMsg", bridge() ? "" : NO_BRIDGE);
     if (API.token && bridge()) {
       formMsg("auMsg", "Signing you in…", true);
-      try { const r = await call("me"); S.me = r.profile; formMsg("auMsg", ""); openLobby(); }
+      try { const r = await call("me"); S.me = r.profile; formMsg("auMsg", ""); afterAuth(); }
       catch (e) { if (e.status === 401) { API.token = null; store.set("cl3d_token", null); formMsg("auMsg", ""); } else formMsg("auMsg", e.message); }
     }
   }
@@ -2408,7 +2469,7 @@
       API.token = null;
       const r = await call(authTab === "up" ? "signup" : "login", { username, password });
       API.token = r.token; S.me = r.profile; store.set("cl3d_token", r.token);
-      $("auPass").value = ""; openLobby();
+      $("auPass").value = ""; afterAuth();
     } catch (e) { formMsg("auMsg", e.message); }
     finally { $("auGo").disabled = false; }
   }
@@ -2550,18 +2611,200 @@
     if (S.net && b && API.token) b.request("room_leave", { token: API.token, code: S.net.code });
   });
 
+  // ================================================================ IPL season (signed-in players only)
+  // The real IPL format (since 2022): ten teams in two groups of five. Each team plays the other four in its group
+  // twice, its "twin" in the other group (same row below) twice and the other four once: 14 league matches each and
+  // 70 in all, seven at home. Two points for a win; ties are settled by a Super Over; net run rate separates teams
+  // on equal points. The top four go to the playoffs: Qualifier 1 (1st v 2nd), Eliminator (3rd v 4th), Qualifier 2
+  // (loser of Q1 v winner of the Eliminator) and the Final: 74 matches. You play every match your team is in; the
+  // rest are simulated. The season is saved to your account (multiplayer.py, cricket_multiplayer.db) after each match.
+  const SEASON_GROUPS = [["MI", "KKR", "RR", "DC", "LSG"], ["CSK", "SRH", "RCB", "PBKS", "GT"]];
+  // Each side's approximate all-time IPL win rate sets its strength in simulated matches (with a home advantage).
+  const HIST_WIN = { CSK: 0.58, GT: 0.57, MI: 0.55, KKR: 0.52, LSG: 0.51, RR: 0.5, SRH: 0.48, RCB: 0.48, PBKS: 0.45, DC: 0.45 };
+  const STAGE_NAME = { league: "League match", Q1: "Qualifier 1", E: "Eliminator", Q2: "Qualifier 2", F: "Final" };
+  const SEASON_MATCHES = 74;
+  let SEASON = null;
+
+  function makeFixtures() {
+    const list = [], add = (home, away) => list.push({ home, away, stage: "league" }), [A, B] = SEASON_GROUPS;
+    SEASON_GROUPS.forEach((g) => { for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) { add(g[i], g[j]); add(g[j], g[i]); } });
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) {
+      if (i === j) { add(A[i], B[j]); add(B[j], A[i]); } // twins: home and away
+      else if ((j - i + 5) % 5 <= 2) add(A[i], B[j]); else add(B[j], A[i]); // the rest once: two at home, two away
+    }
+    // spread the games through the season: the next match goes to the teams that have played least, avoiding
+    // anyone who played in the match before
+    const played = Object.fromEntries(TEAM_KEYS.map((k) => [k, 0])), out = [];
+    let pool = list, last = [];
+    while (pool.length) {
+      let best = null, bestScore = Infinity;
+      for (const m of pool) {
+        const s = played[m.home] + played[m.away] + (last.includes(m.home) || last.includes(m.away) ? 5 : 0) + Math.random();
+        if (s < bestScore) { bestScore = s; best = m; }
+      }
+      pool = pool.filter((m) => m !== best); played[best.home]++; played[best.away]++; last = [best.home, best.away]; out.push(best);
+    }
+    return out.map((m, i) => Object.assign(m, { n: i + 1, res: null }));
+  }
+  // A simulated match: the winner from the two sides' strengths, then a believable T20 scorecard to go with it
+  // (all-out innings count as the full 20 overs for net run rate, as in the IPL).
+  function simMatch(home, away) {
+    const str = (k, atHome) => (HIST_WIN[k] / (1 - HIST_WIN[k])) * (atHome ? 1.15 : 1);
+    const winner = Math.random() < str(home, true) / (str(home, true) + str(away, false)) ? home : away;
+    const first = Math.random() < 0.5 ? home : away, second = first === home ? away : home;
+    const runs1 = Math.round(clamp(180 + gauss() * 25, 105, 270)), wk1 = Math.round(clamp(6 + gauss() * 2, 1, 10));
+    const a = { team: first, runs: runs1, wkts: wk1, balls: wk1 === 10 ? Math.round(rand(96, 119)) : 120, quota: 120, allOut: wk1 === 10 };
+    let b, how;
+    if (winner === first) {
+      const m = Math.round(clamp(Math.abs(gauss()) * 22, 1, runs1 - 60)), wk = Math.round(clamp(7 + gauss() * 2, 2, 10));
+      b = { team: second, runs: runs1 - m, wkts: wk, balls: wk === 10 ? Math.round(rand(80, 119)) : 120, quota: 120, allOut: wk === 10 };
+      how = `won by ${m} run${m === 1 ? "" : "s"}`;
+    } else {
+      const wk = Math.round(clamp(4 + gauss() * 2, 0, 9)), spare = Math.round(clamp(Math.abs(gauss()) * 14, 1, 40));
+      b = { team: second, runs: runs1 + 1 + Math.floor(Math.random() * 5), wkts: wk, balls: 120 - spare, quota: 120, allOut: false };
+      how = `won by ${10 - wk} wicket${10 - wk === 1 ? "" : "s"}`;
+    }
+    return { winner, inns: [a, b], text: `${IPL[winner].name} ${how}` };
+  }
+  function seasonTable(sn) {
+    const t = Object.fromEntries(TEAM_KEYS.map((k) => [k, { key: k, p: 0, w: 0, l: 0, pts: 0, rf: 0, bf: 0, ra: 0, bb: 0 }]));
+    sn.fixtures.filter((f) => f.stage === "league" && f.res).forEach((f) => {
+      const [x, y] = f.res.inns;
+      for (const [me, op] of [[x, y], [y, x]]) {
+        const row = t[me.team]; row.p++;
+        if (f.res.winner === me.team) { row.w++; row.pts += 2; } else row.l++;
+        row.rf += me.runs; row.bf += me.allOut ? me.quota : me.balls; row.ra += op.runs; row.bb += op.allOut ? op.quota : op.balls;
+      }
+    });
+    const rows = Object.values(t);
+    rows.forEach((r) => { r.nrr = r.bf && r.bb ? (6 * r.rf) / r.bf - (6 * r.ra) / r.bb : 0; });
+    return rows.sort((p, q) => q.pts - p.pts || q.nrr - p.nrr || q.w - p.w);
+  }
+  // Add each playoff match once the matches that decide it have been played.
+  function seasonProgress(sn) {
+    const fx = sn.fixtures, get = (s) => fx.find((f) => f.stage === s), loser = (f) => (f.res.winner === f.home ? f.away : f.home);
+    if (!get("Q1") && fx.every((f) => f.stage !== "league" || f.res)) {
+      const top = seasonTable(sn).slice(0, 4).map((r) => r.key);
+      sn.top4 = top;
+      fx.push({ n: 71, stage: "Q1", home: top[0], away: top[1], res: null }, { n: 72, stage: "E", home: top[2], away: top[3], res: null });
+    }
+    if (get("Q1") && get("Q1").res && get("E").res && !get("Q2")) fx.push({ n: 73, stage: "Q2", home: loser(get("Q1")), away: get("E").res.winner, res: null });
+    if (get("Q2") && get("Q2").res && !get("F")) fx.push({ n: 74, stage: "F", home: get("Q1").res.winner, away: get("Q2").res.winner, res: null });
+    if (get("F") && get("F").res) sn.champion = get("F").res.winner;
+  }
+  // Simulate every match up to your team's next one (or to the end, once your team is out). Returns that match.
+  function seasonAdvance(sn) {
+    for (;;) {
+      seasonProgress(sn);
+      const next = sn.fixtures.find((f) => !f.res);
+      if (!next || next.home === sn.team || next.away === sn.team) return next || null;
+      next.res = simMatch(next.home, next.away);
+    }
+  }
+  async function seasonSave() {
+    try { await call("season_save", { season: SEASON }); return true; }
+    catch (e) { formMsg("snMsg", `Couldn't save your season: ${e.message}`); return false; }
+  }
+
+  async function openSeason() {
+    if (!S.me) return goOnline("season"); // season mode needs an account to save to
+    screen("scrSeason"); $("snNext").innerHTML = ""; $("snTable").innerHTML = ""; $("snResults").innerHTML = "";
+    formMsg("snMsg", "Loading your season…", true);
+    try { SEASON = (await call("season_load")).season; }
+    catch (e) {
+      if (e.status === 401) { API.token = null; store.set("cl3d_token", null); S.me = null; return goOnline("season"); }
+      return formMsg("snMsg", e.message);
+    }
+    formMsg("snMsg", "");
+    if (!SEASON || SEASON.v !== 1) return newSeasonScreen();
+    renderSeason();
+  }
+  function newSeasonScreen() {
+    const s = S.setup;
+    s.sTeam = s.sTeam || (S.me && S.me.team) || s.team; s.sOvers = s.sOvers || 5; s.sWkts = s.sWkts || 5;
+    renderPicker($("pickSeason"), s.sTeam, (k) => { s.sTeam = k; newSeasonScreen(); });
+    renderChips($("oversChipsSeason"), [2, 3, 5, 10, 20], s.sOvers, (v) => { s.sOvers = v; newSeasonScreen(); }, null, true);
+    renderChips($("wktChipsSeason"), [3, 5, 10], s.sWkts, (v) => { s.sWkts = v; newSeasonScreen(); });
+    renderChips($("diffChipsSeason"), ["easy", "medium", "hard"], s.diff, (v) => { s.diff = v; newSeasonScreen(); }, (v) => v[0].toUpperCase() + v.slice(1));
+    screen("scrSeasonNew");
+  }
+  async function createSeason() {
+    const s = S.setup;
+    SEASON = { v: 1, year: new Date().getFullYear(), team: s.sTeam, overs: s.sOvers, wkts: s.sWkts, diff: s.diff, fixtures: makeFixtures(), champion: null };
+    seasonAdvance(SEASON);
+    $("seasonCreate").disabled = true; formMsg("snNewMsg", "Saving…", true);
+    const ok = await seasonSave(); $("seasonCreate").disabled = false;
+    if (!ok) return formMsg("snNewMsg", $("snMsg").innerHTML);
+    formMsg("snNewMsg", ""); renderSeason();
+  }
+  function seasonFinish(sn) { // how your team's season ended
+    const me = sn.team, pos = seasonTable(sn).findIndex((r) => r.key === me) + 1;
+    if (sn.champion === me) return "Champions! 🏆";
+    const lost = sn.fixtures.find((f) => f.stage !== "league" && f.res && (f.home === me || f.away === me) && f.res.winner !== me);
+    return lost ? `Finished ${ordinal(pos)} in the league, then lost the ${STAGE_NAME[lost.stage]}.` : `Finished ${ordinal(pos)} in the league (top four go through).`;
+  }
+  const ordinal = (n) => { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+  function renderSeason() {
+    const sn = SEASON, me = sn.team, next = seasonAdvance(sn), table = seasonTable(sn);
+    $("snTitle").textContent = `IPL ${sn.year} · ${IPL[me].name}`;
+    if (!next) {
+      $("snNext").innerHTML = `<div class="champ">🏆<br><b>${esc(IPL[sn.champion].name)}</b><br>win the IPL ${sn.year}` +
+        `${sn.champion === me ? " – that's you! 🎉" : ""}</div><p class="center">${esc(seasonFinish(sn))}</p>` +
+        `<button class="primary" id="snNew">Start a new season</button>`;
+      $("snNew").onclick = () => newSeasonScreen();
+    } else {
+      const opp = next.home === me ? next.away : next.home, v = VENUES[next.home];
+      $("snNext").innerHTML = `<div class="next">${badgeHTML(opp)}<div class="grow"><div class="stage">${STAGE_NAME[next.stage]} · Match ${next.n} of ${SEASON_MATCHES}</div>` +
+        `<b>${me} vs ${opp}</b><div class="muted small">${esc(v[0])}, ${esc(v[1])} · ${next.home === me ? "home" : "away"} · ${sn.overs} overs</div></div>` +
+        `<button class="ghost" id="snSim" title="Let the computer play this one">Simulate</button><button class="primary" id="snPlay">▶ Play</button></div>`;
+      $("snPlay").onclick = () => { ac(); playSeasonMatch(next); };
+      $("snSim").onclick = async () => { next.res = simMatch(next.home, next.away); seasonAdvance(sn); await seasonSave(); renderSeason(); };
+    }
+    $("snTable").innerHTML = `<table class="ptable"><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>NRR</th><th>Pts</th></tr>` +
+      table.map((r, i) => `<tr class="${r.key === me ? "mine" : ""}${i === 3 ? " cut" : ""}"><td>${i + 1}</td><td><span class="tm">${badgeHTML(r.key, "sm")}${esc(IPL[r.key].name)}</span></td>` +
+        `<td>${r.p}</td><td>${r.w}</td><td>${r.l}</td><td>${r.nrr >= 0 ? "+" : ""}${r.nrr.toFixed(3)}</td><td class="pts">${r.pts}</td></tr>`).join("") + `</table>`;
+    const done = sn.fixtures.filter((f) => f.res).sort((x, y) => y.n - x.n).slice(0, 6);
+    $("snResults").innerHTML = done.length ? done.map((f) => `<div class="res">${badgeHTML(f.res.winner, "sm")}<div class="grow"><small>${f.stage === "league" ? `Match ${f.n}` : STAGE_NAME[f.stage]}</small> ` +
+      `${f.home} v ${f.away}: <b>${esc(f.res.text)}</b></div><small>${f.res.inns.map((x) => `${x.team} ${x.runs}/${x.wkts}`).join(" · ")}</small></div>`).join("")
+      : `<div class="muted small">No matches played yet.</div>`;
+    screen("scrSeason");
+  }
+  function playSeasonMatch(fx) {
+    const sn = SEASON, opp = fx.home === sn.team ? fx.away : fx.home;
+    S.seasonMatch = fx.n;
+    startCpuMatch(sn.team, opp, fx.home, { overs: sn.overs, wkts: sn.wkts, diff: sn.diff }, `${STAGE_NAME[fx.stage]} · Match ${fx.n} of ${SEASON_MATCHES}`);
+  }
+  // Your match is over: put it in the season (a tie goes to a Super Over), simulate up to your next match and save.
+  function recordSeasonResult(winnerIdx, text) {
+    const fx = SEASON && SEASON.fixtures.find((f) => f.n === S.seasonMatch);
+    S.seasonMatch = null;
+    if (!fx) return;
+    const inn = (x) => ({ team: S.teams[x.bat].key, runs: x.runs, wkts: x.wkts, balls: x.balls, quota: S.cfg.overs * 6, allOut: x.wkts >= S.cfg.wkts });
+    fx.res = { winner: S.teams[winnerIdx].key, inns: S.innings.map(inn), text, played: true };
+    seasonAdvance(SEASON);
+    seasonSave();
+  }
+  function backToSeason() { S.seasonMatch = null; toMenu(); renderSeason(); }
+
   // ================================================================ menus wiring
   function renderHome() { $("homeUser").innerHTML = S.me ? `Signed in as <b>${esc(S.me.username)}</b>` : ""; }
   function renderSetup() {
     const s = S.setup;
-    renderPicker($("pick1"), s.team, (k) => { s.team = k; renderSetup(); });    renderChips($("oversChips"), [1, 2, 3, 5, 10, 20], s.overs, (v) => { s.overs = v; renderSetup(); }, null, true);
+    renderPicker($("pick1"), s.team, (k) => { s.team = k; renderSetup(); });
+    renderChips($("oversChips"), [1, 2, 3, 5, 10, 20], s.overs, (v) => { s.overs = v; renderSetup(); }, null, true);
     renderChips($("wktChips"), [1, 2, 3, 5, 10], s.wkts, (v) => { s.wkts = v; renderSetup(); });
     renderChips($("diffChips"), ["easy", "medium", "hard"], s.diff, (v) => { s.diff = v; renderSetup(); }, (v) => v[0].toUpperCase() + v.slice(1));
   }
   document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
     ac();
-    if (b.dataset.go === "online") goOnline(); else { renderSetup(); screen("scrSetup"); }
+    if (b.dataset.go === "online") goOnline();
+    else if (b.dataset.go === "season") openSeason();
+    else { renderSetup(); screen("scrSetup"); }
   }));
+  $("seasonCreate").onclick = () => { ac(); createSeason(); };
+  $("seasonAbandon").onclick = () => showMsg("Abandon this season?", "<p>All its results will be deleted and you'll start a new season.</p>",
+    [{ label: "Keep playing it", fn: () => screen("scrSeason") },
+      { label: "Abandon it", fn: async () => { try { await call("season_reset"); SEASON = null; newSeasonScreen(); } catch (e) { screen("scrSeason"); formMsg("snMsg", e.message); } } }]);
   document.querySelectorAll("[data-back]").forEach((b) => b.addEventListener("click", () => { renderHome(); screen(b.dataset.back); }));
   $("setupStart").onclick = () => { ac(); startOffline(); };
   document.querySelectorAll("#authTabs button").forEach((b) => b.addEventListener("click", () => setAuthTab(b.dataset.tab)));
@@ -2569,7 +2812,7 @@
   $("auPass").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAuth(); });
   $("signOut").onclick = () => {
     call("logout").catch(() => {});
-    API.token = null; store.set("cl3d_token", null); S.me = null; renderHome(); screen("scrHome");
+    API.token = null; store.set("cl3d_token", null); S.me = null; SEASON = null; renderHome(); screen("scrHome");
   };
   $("createRoom").onclick = createRoom;
   $("joinBtn").onclick = joinRoom;
@@ -2581,9 +2824,11 @@
     setTimeout(() => { $("copyCode").textContent = "Copy code"; }, 1500);
   };
   $("menuBtn").onclick = () => {
-    const online = S.mode === "online";
-    showMsg("Leave this match?", online ? "<p>Your opponent will be told you left.</p>" : "<p>This match's progress will be lost.</p>",
-      [{ label: "Keep playing", fn: () => {} }, { label: "Leave match", fn: () => (online ? leaveRoom() : toMenu()) }]);
+    const online = S.mode === "online", season = !!S.seasonMatch;
+    showMsg("Leave this match?", online ? "<p>Your opponent will be told you left.</p>"
+      : season ? "<p>This match won't count. Your season is saved up to your last finished match, so you can play it again later.</p>"
+      : "<p>This match's progress will be lost.</p>",
+      [{ label: "Keep playing", fn: () => {} }, { label: "Leave match", fn: () => (online ? leaveRoom() : season ? backToSeason() : toMenu()) }]);
   };
 
   // ================================================================ input
